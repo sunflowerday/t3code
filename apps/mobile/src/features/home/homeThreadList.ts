@@ -188,7 +188,9 @@ export function sortHomeProjectScopes(input: {
  * Default home view only surfaces threads active within this window, to keep the
  * screen compact while keeping recent work visible.
  */
-const RECENT_THREAD_WINDOW_MS = 5 * 24 * 60 * 60 * 1000;
+// Kuca micro-patch (#243/mobile): show ALL sessions by default (owner has few
+// threads and wants the full list, not a 5-day window). ~100y window = no crop.
+const RECENT_THREAD_WINDOW_MS = 100 * 365 * 24 * 60 * 60 * 1000;
 /** Fallback when a project has no threads inside the recency window. */
 const RECENT_THREAD_FALLBACK_COUNT = 3;
 
