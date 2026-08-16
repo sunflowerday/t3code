@@ -63,6 +63,10 @@ import {
   type SelectableMarkdownSkill,
 } from "../../native/SelectableMarkdownText";
 
+// kuca: view-card split + WebView-hosted card renderer.
+import { splitViewMessageSegments } from "./viewCardSegments";
+import { ViewCardBlock } from "./ViewCardBlock";
+
 import { AppText as Text } from "../../components/AppText";
 import { CopyTextButton } from "../../components/CopyTextButton";
 import {
@@ -962,25 +966,37 @@ function renderFeedEntry(
         className={cn(showAssistantMeta ? "mb-5 px-1" : "mb-2 px-1")}
         {...(enterAnimated ? { entering: FadeIn.duration(220) } : {})}
       >
-        {message.text.trim().length > 0 ? (
-          hasNativeSelectableMarkdownText() ? (
-            <SelectableMarkdownText
-              markdown={message.text}
-              skills={props.skills}
-              textStyle={styles.nativeTextStyle}
-              onLinkPress={props.onMarkdownLinkPress}
-            />
-          ) : (
-            <Markdown
-              options={{ gfm: true }}
-              renderers={styles.renderers}
-              styles={styles.styles}
-              theme={styles.theme}
-            >
-              {message.text}
-            </Markdown>
-          )
-        ) : null}
+        {message.text.trim().length > 0
+          ? // kuca: a Kuca answer mixes prose with ```view blocks the desktop paints as cards.
+            // Without the split those fences show up as raw JSON in a code block.
+            splitViewMessageSegments(message.text).map((segment, index) =>
+              segment.kind === "card" ? (
+                <ViewCardBlock
+                  key={`card-${String(index)}`}
+                  environmentId={props.environmentId}
+                  code={segment.content}
+                />
+              ) : hasNativeSelectableMarkdownText() ? (
+                <SelectableMarkdownText
+                  key={`text-${String(index)}`}
+                  markdown={segment.content}
+                  skills={props.skills}
+                  textStyle={styles.nativeTextStyle}
+                  onLinkPress={props.onMarkdownLinkPress}
+                />
+              ) : (
+                <Markdown
+                  key={`text-${String(index)}`}
+                  options={{ gfm: true }}
+                  renderers={styles.renderers}
+                  styles={styles.styles}
+                  theme={styles.theme}
+                >
+                  {segment.content}
+                </Markdown>
+              ),
+            )
+          : null}
         {attachments.map((attachment) => {
           return (
             <MessageAttachmentImage
