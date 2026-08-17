@@ -4,10 +4,10 @@ const MARKER = "t3-fatal-handler";
 const SNIPPET = `
     // ${MARKER}: keep the process alive and leave the JS message in device logs.
     RCTSetFatalHandler { error in
-      NSLog("[t3-fatal] %@", error.localizedDescription)
+      NSLog("[t3-fatal] %@", error?.localizedDescription ?? "unknown")
     }
     RCTSetFatalExceptionHandler { exception in
-      NSLog("[t3-fatal] %@", exception.reason ?? String(describing: exception.name))
+      NSLog("[t3-fatal] %@", exception?.reason ?? String(describing: exception?.name))
     }
 `;
 
