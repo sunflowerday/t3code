@@ -10,7 +10,9 @@ import { expect, it } from "vite-plus/test";
 
 import {
   createThreadSearchResultsAtomFamily,
+  inspectThreadSearchQuery,
   makeThreadSearchKey,
+  resolveThreadSearchRequest,
   threadSearchMatchKey,
 } from "./threadSearch.ts";
 
@@ -21,6 +23,28 @@ it("creates stable keys regardless of environment order", () => {
   expect(makeThreadSearchKey([envB, envA], "needle")).toBe(
     makeThreadSearchKey([envA, envB], "needle"),
   );
+});
+
+it("accepts contract-valid search queries and rejects the 200-character ceiling", () => {
+  expect(inspectThreadSearchQuery("ab")).toBe("ok");
+  expect(inspectThreadSearchQuery("  needle  ")).toBe("ok");
+  expect(inspectThreadSearchQuery("x")).toBe("too-short");
+  expect(inspectThreadSearchQuery("x".repeat(200))).toBe("ok");
+  expect(inspectThreadSearchQuery("x".repeat(201))).toBe("too-long");
+});
+
+it("does not build a search key for over-limit user input", () => {
+  expect(resolveThreadSearchRequest([envA], "x".repeat(201))).toEqual({
+    key: null,
+    queryIssue: "too-long",
+  });
+  expect(resolveThreadSearchRequest([envA], "needle").key).toBe(
+    makeThreadSearchKey([envA], "needle"),
+  );
+  expect(resolveThreadSearchRequest([], "needle")).toEqual({
+    key: null,
+    queryIssue: null,
+  });
 });
 
 it("encodes scoped thread keys without delimiter collisions", () => {
@@ -34,6 +58,20 @@ it("encodes scoped thread keys without delimiter collisions", () => {
   });
 
   expect(first).not.toBe(second);
+});
+
+it("still throws when an over-limit query is forced into the atom key", () => {
+  const searchAtom = createThreadSearchResultsAtomFamily<Error>({
+    getSearchAtom: () => Atom.make(AsyncResult.success({ matches: [] })),
+    labelPrefix: "test:thread-search",
+  });
+  const registry = AtomRegistry.make();
+
+  expect(() =>
+    registry.get(searchAtom(JSON.stringify([[envA], "x".repeat(201)]))),
+  ).toThrow();
+
+  registry.dispose();
 });
 
 it("merges successful environments and silently ignores failures", () => {

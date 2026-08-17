@@ -5,7 +5,7 @@ import {
 } from "@t3tools/client-runtime/state/threads";
 import {
   createThreadSearchResultsAtomFamily,
-  makeThreadSearchKey,
+  resolveThreadSearchRequest,
   type EnvironmentThreadSearchMatch,
 } from "@t3tools/client-runtime/state/thread-search";
 import { type VcsRefTarget } from "@t3tools/client-runtime/state/vcs";
@@ -85,13 +85,12 @@ export function useThreadSearch(
   readonly isPending: boolean;
 } {
   const normalizedQuery = query.trim();
+  const liveRequest = resolveThreadSearchRequest(environmentIds, normalizedQuery);
   const debouncedQuery = useDebouncedValue(normalizedQuery, THREAD_SEARCH_DEBOUNCE_MS);
-  const canSearch = environmentIds.length > 0 && normalizedQuery.length >= 2;
-  const settledQuery = canSearch && normalizedQuery === debouncedQuery ? debouncedQuery : null;
-  const searchKey = useMemo(
-    () => (settledQuery === null ? null : makeThreadSearchKey(environmentIds, settledQuery)),
-    [environmentIds, settledQuery],
-  );
+  const settledRequest = resolveThreadSearchRequest(environmentIds, debouncedQuery);
+  const canSearch = liveRequest.key !== null;
+  const searchKey =
+    canSearch && normalizedQuery === debouncedQuery ? settledRequest.key : null;
   const result = useAtomValue(
     searchKey === null ? EMPTY_THREAD_SEARCH_ATOM : threadSearchResultsAtom(searchKey),
   );

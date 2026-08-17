@@ -1,7 +1,7 @@
 import type { EnvironmentId, OrchestrationThread, ThreadId } from "@t3tools/contracts";
 import {
   createThreadSearchResultsAtomFamily,
-  makeThreadSearchKey,
+  resolveThreadSearchRequest,
   type EnvironmentThreadSearchMatch,
 } from "@t3tools/client-runtime/state/thread-search";
 import { useAtomValue } from "@effect/atom-react";
@@ -73,15 +73,15 @@ export function useThreadSearch(
 ): {
   readonly matches: ReadonlyArray<EnvironmentThreadSearchMatch>;
   readonly isPending: boolean;
+  readonly queryIssue: "too-long" | null;
 } {
   const normalizedQuery = query.trim();
+  const liveRequest = resolveThreadSearchRequest(environmentIds, normalizedQuery);
   const debouncedQuery = useDebouncedValue(normalizedQuery, THREAD_SEARCH_DEBOUNCE_MS);
-  const canSearch = environmentIds.length > 0 && normalizedQuery.length >= 2;
-  const settledQuery = canSearch && normalizedQuery === debouncedQuery ? debouncedQuery : null;
-  const searchKey = useMemo(
-    () => (settledQuery === null ? null : makeThreadSearchKey(environmentIds, settledQuery)),
-    [environmentIds, settledQuery],
-  );
+  const settledRequest = resolveThreadSearchRequest(environmentIds, debouncedQuery);
+  const canSearch = liveRequest.key !== null;
+  const searchKey =
+    canSearch && normalizedQuery === debouncedQuery ? settledRequest.key : null;
   const result = useAtomValue(
     searchKey === null ? EMPTY_THREAD_SEARCH_ATOM : threadSearchResultsAtom(searchKey),
   );
@@ -89,6 +89,7 @@ export function useThreadSearch(
   return {
     matches: isDebouncing ? EMPTY_THREAD_SEARCH_MATCHES : result.matches,
     isPending: canSearch && (isDebouncing || result.isLoading),
+    queryIssue: liveRequest.queryIssue,
   };
 }
 

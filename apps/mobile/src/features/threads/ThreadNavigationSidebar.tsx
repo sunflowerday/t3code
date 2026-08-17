@@ -1118,13 +1118,15 @@ function ThreadNavigationSidebarPane(
     <Text className="px-2 py-4 text-sm text-foreground-muted">
       {catalogState.isLoadingConnections
         ? "Loading threads…"
-        : props.searchQuery.trim().length > 0
-          ? threadSearch.isPending
-            ? "Searching thread messages…"
-            : "No matching threads"
-          : selectedProjectScope !== null
-            ? `No threads in ${selectedProjectScope.title}`
-            : "No threads yet"}
+        : threadSearch.queryIssue === "too-long"
+          ? "Thread search accepts at most 200 characters."
+          : props.searchQuery.trim().length > 0
+            ? threadSearch.isPending
+              ? "Searching thread messages…"
+              : "No matching threads"
+            : selectedProjectScope !== null
+              ? `No threads in ${selectedProjectScope.title}`
+              : "No threads yet"}
     </Text>
   );
 
