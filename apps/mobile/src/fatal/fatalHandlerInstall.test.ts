@@ -1,11 +1,11 @@
-import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import * as NodeModule from "node:module";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
-const require = createRequire(import.meta.url);
+const require = NodeModule.createRequire(import.meta.url);
 const {
   ANDROID_THROW,
   HELPER_NAME,
@@ -26,10 +26,10 @@ const {
   neutralizeIosErrorRecoveryCrash: (source: string) => string;
 };
 
-const mobileRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const mobileRoot = NodePath.join(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "../..");
 
 function readMobileFile(relativePath: string): string {
-  return readFileSync(join(mobileRoot, relativePath), "utf8");
+  return NodeFS.readFileSync(NodePath.join(mobileRoot, relativePath), "utf8");
 }
 
 describe("fatal handler install sites", () => {
