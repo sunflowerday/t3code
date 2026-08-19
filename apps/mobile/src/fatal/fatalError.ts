@@ -174,6 +174,8 @@ export function installNewArchFatalListener(
 }
 
 export const FATAL_PROBE_MESSAGE = "t3-fatal-probe";
+/** Unique to this Release build. `--expect-js` and later install both grep this string. */
+export const RELEASE_BUILD_STAMP = "kuca-wire-20260819T070012Z-mobbuild";
 const FATAL_PROBE_FILE = "fatal-probe";
 
 export async function throwIfFatalProbeArmed(
@@ -209,6 +211,7 @@ async function readFatalProbeFile(): Promise<boolean> {
 export function installFatalErrorHandler(
   options: InstallFatalErrorHandlerOptions = {},
 ): () => void {
+  console.log("[kuca-build]", RELEASE_BUILD_STAMP);
   const uninstallNewArch = installNewArchFatalListener({
     ...(options.newArch === undefined ? {} : { registry: options.newArch }),
     ...(options.persist === undefined ? {} : { persist: options.persist }),
