@@ -58,12 +58,34 @@ def main() -> int:
         print(f"error: missing {args.xcresult}", file=sys.stderr)
         return 1
     summary = load_summary(args.xcresult)
+    shots_dir = args.out.with_name(args.out.stem + "-attachments")
+    shots_dir.mkdir(parents=True, exist_ok=True)
+    exported = run(
+        [
+            "xcrun",
+            "xcresulttool",
+            "export",
+            "attachments",
+            "--path",
+            str(args.xcresult),
+            "--output-path",
+            str(shots_dir),
+        ]
+    )
+    pngs = sorted(str(p) for p in shots_dir.rglob("*") if p.suffix.lower() in {".png", ".jpeg", ".jpg"})
     payload = {
         "xcresult": str(args.xcresult),
         "summary": summary,
+        "attachments_dir": str(shots_dir),
+        "attachments_export_exit": exported.returncode,
+        "attachments_export_stderr": exported.stderr.strip(),
+        "pngs": pngs,
     }
     args.out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     print(f"wrote {args.out}")
+    print(f"png_count={len(pngs)}")
+    for path in pngs:
+        print(f"png={path}")
     return 0
 
 

@@ -90,6 +90,105 @@ final class KucaAcceptanceTests: XCTestCase {
     XCTAssertNotEqual(app.state, .notRunning, "Kuca died during search")
   }
 
+  func testSwitchThreadDoesNotCrash() throws {
+    let app = XCUIApplication(bundleIdentifier: Self.kucaBundleId)
+    app.launch()
+    XCTAssertTrue(waitForThreadList(in: app, timeout: 30), "session list never appeared")
+
+    let first = Self.longestThreadTitle
+    let secondQuery = "ssh"
+    let search = app.descendants(matching: .any)["Search threads"].firstMatch
+    if search.waitForExistence(timeout: 5) {
+      search.tap()
+      search.typeText(first)
+    }
+    let firstRow = app.descendants(matching: .any)[first].firstMatch
+    XCTAssertTrue(firstRow.waitForExistence(timeout: 10), "first thread row missing")
+    firstRow.tap()
+    XCTAssertTrue(firstScreenAppeared(in: app, timeout: 15), "first thread did not open")
+    attachScreenshot(app, name: "switch-first")
+
+    goBackToThreadList(in: app)
+    XCTAssertTrue(waitForThreadList(in: app, timeout: 15), "list did not return")
+
+    let clear = app.descendants(matching: .any)["Clear search"].firstMatch
+    if clear.exists {
+      clear.tap()
+    }
+    if search.waitForExistence(timeout: 5) {
+      search.tap()
+      search.typeText(secondQuery)
+    }
+    let other = app.cells.firstMatch.exists ? app.cells.firstMatch : app.buttons.matching(
+      NSPredicate(format: "label.length > 8 AND label != %@", first),
+    ).firstMatch
+    let switched: Bool
+    if other.waitForExistence(timeout: 8) {
+      other.tap()
+      switched = firstScreenAppeared(in: app, timeout: 15)
+    } else {
+      switched = false
+    }
+    attachScreenshot(app, name: "switch-second")
+    record(
+      name: "switch-thread-no-crash",
+      passed: app.state != .notRunning && switched,
+      elapsedSec: 0,
+      detail: switched ? "opened a second thread" : "second thread row not found",
+    )
+    XCTAssertTrue(switched, "could not open a second thread")
+    XCTAssertNotEqual(app.state, .notRunning)
+  }
+
+  func testSendToNewThreadDoesNotCrash() throws {
+    let app = XCUIApplication(bundleIdentifier: Self.kucaBundleId)
+    app.launch()
+    XCTAssertTrue(waitForThreadList(in: app, timeout: 30), "session list never appeared")
+    let newTask = app.descendants(matching: .any)["New task"].firstMatch
+    XCTAssertTrue(newTask.waitForExistence(timeout: 8), "New task control missing")
+    newTask.tap()
+
+    let editor = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+    XCTAssertTrue(editor.waitForExistence(timeout: 10), "new-thread composer missing")
+    editor.tap()
+    let ping = "lane-mobbuild-20260819-acceptance ping, ignore"
+    editor.typeText(ping)
+
+    let start = app.descendants(matching: .any)["Start task"].firstMatch
+    let queue = app.descendants(matching: .any)["Queue task"].firstMatch
+    let send = app.descendants(matching: .any)["Send"].firstMatch
+    if start.waitForExistence(timeout: 3) {
+      start.tap()
+    } else if queue.exists {
+      queue.tap()
+    } else if send.exists {
+      send.tap()
+    } else {
+      record(
+        name: "send-new-thread-no-crash",
+        passed: false,
+        elapsedSec: 0,
+        detail: "no Start task / Queue task / Send control",
+      )
+      attachScreenshot(app, name: "send-new-thread")
+      XCTFail("no send/start control on new-thread screen")
+      return
+    }
+
+    let alive = app.state != .notRunning
+    let pingVisible = app.staticTexts[ping].waitForExistence(timeout: 12)
+      || app.textViews.matching(NSPredicate(format: "value CONTAINS %@", ping)).firstMatch
+      .waitForExistence(timeout: 2)
+    attachScreenshot(app, name: "send-new-thread")
+    record(
+      name: "send-new-thread-no-crash",
+      passed: alive,
+      elapsedSec: 0,
+      detail: pingVisible ? "own ping visible" : "process still running after start",
+    )
+    XCTAssertNotEqual(app.state, .notRunning, "Kuca died after starting a new thread")
+  }
+
   func testApprovalCardIfPresent() throws {
     let app = XCUIApplication(bundleIdentifier: Self.kucaBundleId)
     app.launch()
@@ -139,6 +238,19 @@ final class KucaAcceptanceTests: XCTestCase {
     XCTAssertNotEqual(app.state, .notRunning, "process died instead of showing the fatal screen")
   }
 
+  private func goBackToThreadList(in app: XCUIApplication) {
+    let candidates = [
+      app.buttons["Threads"].firstMatch,
+      app.descendants(matching: .any)["Navigate up"].firstMatch,
+      app.navigationBars.buttons.firstMatch,
+    ]
+    for control in candidates where control.exists {
+      control.tap()
+      return
+    }
+    app.swipeDown()
+  }
+
   private func waitForThreadList(in app: XCUIApplication, timeout: TimeInterval) -> Bool {
     let search = app.descendants(matching: .any)["Search threads"]
     let title = app.staticTexts["Threads"]
@@ -175,10 +287,15 @@ final class KucaAcceptanceTests: XCTestCase {
   }
 
   private func attachScreenshot(_ app: XCUIApplication, name: String) {
-    let attachment = XCTAttachment(screenshot: app.screenshot())
+    let shot = app.screenshot()
+    let attachment = XCTAttachment(screenshot: shot)
     attachment.name = name
     attachment.lifetime = .keepAlways
     add(attachment)
+    if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+      let url = dir.appendingPathComponent("\(name).png")
+      try? shot.pngRepresentation.write(to: url)
+    }
   }
 
   private func record(name: String, passed: Bool, elapsedSec: TimeInterval, detail: String) {
