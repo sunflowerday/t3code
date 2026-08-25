@@ -1,7 +1,6 @@
-import { SymbolView } from "../../components/AppSymbol";
-import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
+import { SymbolView } from "../../components/AppSymbol";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useCallback, useState } from "react";
@@ -15,9 +14,10 @@ import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { isConnectionRetrying, presentUserFacingError } from "../../lib/userFacingError";
 import type { ConnectedEnvironmentSummary } from "../../state/remote-runtime-types";
 import { ConnectionStatusDot } from "./ConnectionStatusDot";
+import { presentConnectionStatusText } from "./connectionStatusPresentation";
 
 function connectionStatusLabel(environment: ConnectedEnvironmentSummary): string | null {
-  return connectionStatusText({
+  return presentConnectionStatusText({
     phase: environment.connectionState,
     error: environment.connectionError,
     traceId: environment.connectionErrorTraceId,
