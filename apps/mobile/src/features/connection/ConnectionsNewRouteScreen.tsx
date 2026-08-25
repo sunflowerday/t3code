@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "../../lib/useThemeColor";
+import { presentUserFacingError } from "../../lib/userFacingError";
 
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
@@ -105,7 +106,10 @@ export function ConnectionsNewRouteScreen({
       } catch (error) {
         Alert.alert(
           "Invalid QR code",
-          error instanceof Error ? error.message : "Scanned QR code was not recognized.",
+          presentUserFacingError(
+            error instanceof Error ? error.message : null,
+            "Scanned QR code was not recognized.",
+          ),
         );
       } finally {
         setTimeout(() => {

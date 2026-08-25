@@ -7,6 +7,7 @@ import { Alert } from "react-native";
 
 import { showConfirmDialog } from "../../components/ConfirmDialogHost";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import { presentUserFacingError } from "../../lib/userFacingError";
 import { refreshArchivedThreadsForEnvironment } from "../archive/useArchivedThreadSnapshots";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { environmentServerConfigsAtom } from "../../state/server";
@@ -41,10 +42,10 @@ const ACTION_VERBS: Record<ThreadListAction, string> = {
 
 function actionFailureMessage(action: ThreadListAction, cause: Cause.Cause<unknown>): string {
   const error = Cause.squash(cause);
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return `The thread could not be ${ACTION_VERBS[action]}.`;
+  return presentUserFacingError(
+    error instanceof Error ? error.message : null,
+    `The thread could not be ${ACTION_VERBS[action]}.`,
+  )!;
 }
 
 function selectionHaptic(): void {
@@ -255,9 +256,10 @@ export function useThreadListActions(): {
           const error = Cause.squash(result.cause);
           Alert.alert(
             "Could not snooze thread",
-            error instanceof Error && error.message.trim().length > 0
-              ? error.message
-              : "The thread could not be snoozed.",
+            presentUserFacingError(
+              error instanceof Error ? error.message : null,
+              "The thread could not be snoozed.",
+            ),
           );
           return false;
         }
@@ -293,9 +295,10 @@ export function useThreadListActions(): {
           const error = Cause.squash(result.cause);
           Alert.alert(
             "Could not wake thread",
-            error instanceof Error && error.message.trim().length > 0
-              ? error.message
-              : "The thread could not be woken.",
+            presentUserFacingError(
+              error instanceof Error ? error.message : null,
+              "The thread could not be woken.",
+            ),
           );
           return false;
         }

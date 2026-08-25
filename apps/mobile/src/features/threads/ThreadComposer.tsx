@@ -18,6 +18,7 @@ import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -53,7 +54,13 @@ import {
 import { ControlPill, ControlPillMenu } from "../../components/ControlPill";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
-import { buildModelMenuActions, buildModelOptions, groupByProvider } from "../../lib/modelOptions";
+import {
+  buildModelMenuActions,
+  buildModelOptions,
+  groupByProvider,
+  modelCatalogStatus,
+} from "../../lib/modelOptions";
+import { presentUserFacingError } from "../../lib/userFacingError";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import type { RemoteClientConnectionState } from "../../lib/connection";
 import {
@@ -195,23 +202,29 @@ function composerConnectionStatus(input: {
 
   switch (input.connectionState) {
     case "connecting":
-    case "reconnecting":
-      return {
-        kind: "reconnecting",
-        label:
-          input.connectionError === null
-            ? `Reconnecting to ${environmentLabel}...`
-            : `Failed to connect. Retrying ${environmentLabel}...`,
-      };
+    case "reconnecting": {
+      const connectionError = presentUserFacingError(input.connectionError);
+      return connectionError
+        ? {
+            kind: "unavailable",
+            label: `Failed to connect to ${environmentLabel}: ${connectionError}`,
+          }
+        : {
+            kind: "reconnecting",
+            label: `Reconnecting to ${environmentLabel}...`,
+          };
+    }
     case "offline":
       return { kind: "unavailable", label: "You are offline" };
-    case "error":
+    case "error": {
+      const connectionError = presentUserFacingError(input.connectionError);
       return {
         kind: "unavailable",
-        label: input.connectionError
-          ? `Failed to connect to ${environmentLabel}: ${input.connectionError}`
+        label: connectionError
+          ? `Failed to connect to ${environmentLabel}: ${connectionError}`
           : `Failed to connect to ${environmentLabel}`,
       };
+    }
     case "available":
       return { kind: "unavailable", label: `${environmentLabel} is not connected` };
     case "connected":
@@ -609,6 +622,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     () => buildModelMenuActions(providerGroups, currentModelSelection),
     [providerGroups, currentModelSelection],
   );
+  const catalogStatus = useMemo(() => modelCatalogStatus(props.serverConfig), [props.serverConfig]);
+  const handleModelCatalogIssue = useCallback(() => {
+    if (catalogStatus.kind === "available") {
+      return;
+    }
+    Alert.alert(catalogStatus.title, catalogStatus.detail);
+  }, [catalogStatus]);
 
   // ── Options menu ─────────────────────────────────────────
   const optionsMenuActions = useMemo(
@@ -849,18 +869,28 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   onPress={() => void props.onPickDraftImages()}
                   showChevron={false}
                 />
-                <ControlPillMenu
-                  actions={modelMenuActions}
-                  onPressAction={({ nativeEvent }) => handleModelMenuAction(nativeEvent.event)}
-                >
+                {catalogStatus.kind === "available" ? (
+                  <ControlPillMenu
+                    actions={modelMenuActions}
+                    onPressAction={({ nativeEvent }) => handleModelMenuAction(nativeEvent.event)}
+                  >
+                    <ComposerToolbarTrigger
+                      accessibilityLabel="Model"
+                      iconNode={
+                        <ProviderIcon provider={currentModelOption?.providerDriver} size={16} />
+                      }
+                      label={currentModelOption?.label ?? currentModelSelection.model}
+                    />
+                  </ControlPillMenu>
+                ) : (
                   <ComposerToolbarTrigger
-                    accessibilityLabel="Model"
-                    iconNode={
-                      <ProviderIcon provider={currentModelOption?.providerDriver} size={16} />
-                    }
-                    label={currentModelOption?.label ?? currentModelSelection.model}
+                    accessibilityLabel={catalogStatus.title}
+                    icon="exclamationmark.triangle"
+                    label={catalogStatus.label}
+                    onPress={handleModelCatalogIssue}
+                    showChevron={false}
                   />
-                </ControlPillMenu>
+                )}
                 <ControlPillMenu
                   actions={optionsMenuActions}
                   onPressAction={({ nativeEvent }) => handleOptionsMenuAction(nativeEvent.event)}

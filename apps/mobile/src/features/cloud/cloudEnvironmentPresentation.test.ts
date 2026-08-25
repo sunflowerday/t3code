@@ -3,6 +3,7 @@ import type { RelayEnvironmentStatusResponse } from "@t3tools/contracts/relay";
 import { describe, expect, it } from "vite-plus/test";
 
 import { availableCloudEnvironmentPresentation } from "./cloudEnvironmentPresentation";
+import { GENERIC_ACTIONABLE_ERROR } from "../../lib/userFacingError";
 
 function relayStatus(
   status: RelayEnvironmentStatusResponse["status"],
@@ -69,6 +70,20 @@ describe("available cloud environment presentation", () => {
       connectionErrorTraceId: "trace-offline",
       connectionState: "error",
       statusText: "Tunnel is unavailable.",
+    });
+  });
+
+  it("does not expose relay error identifiers", () => {
+    expect(
+      availableCloudEnvironmentPresentation({
+        isStatusPending: false,
+        status: relayStatus("offline", "synara.engine/engine.request_failed"),
+        statusError: null,
+        statusErrorTraceId: null,
+      }),
+    ).toMatchObject({
+      connectionError: GENERIC_ACTIONABLE_ERROR,
+      statusText: GENERIC_ACTIONABLE_ERROR,
     });
   });
 

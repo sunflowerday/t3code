@@ -8,6 +8,7 @@ import type {
   UserInputQuestion,
 } from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
+import { presentUserFacingError } from "./userFacingError";
 
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
@@ -288,7 +289,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     id: activity.id,
     createdAt: activity.createdAt,
     turnId: activity.turnId,
-    label: taskLabel || activity.summary,
+    label: presentUserFacingError(taskLabel || activity.summary, "Activity update")!,
     tone:
       activity.kind === "task.progress"
         ? "thinking"
@@ -305,7 +306,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     typeof payload.detail === "string" &&
     payload.detail.length > 0
   ) {
-    const detail = stripTrailingExitCode(payload.detail).output;
+    const detail = presentUserFacingError(stripTrailingExitCode(payload.detail).output);
     if (detail) {
       entry.detail = detail;
     }
@@ -320,7 +321,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     entry.changedFiles = changedFiles;
   }
   if (title) {
-    entry.toolTitle = title;
+    entry.toolTitle = presentUserFacingError(title)!;
   }
   if (itemType === "mcp_tool_call") {
     const data = asRecord(payload?.data);

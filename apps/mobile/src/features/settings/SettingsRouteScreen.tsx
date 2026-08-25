@@ -33,6 +33,7 @@ import { refreshManagedRelayEnvironments } from "../cloud/managedRelayState";
 import { useClerkSettingsSheetDetent } from "../cloud/ClerkSettingsSheetDetent";
 import { hasCloudPublicConfig, resolveRelayClerkTokenOptions } from "../cloud/publicConfig";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
+import { presentUserFacingError } from "../../lib/userFacingError";
 import { WorkspaceSidebarToolbar } from "../layout/workspace-sidebar-toolbar";
 import { runtime } from "../../lib/runtime";
 import { useThemeColor } from "../../lib/useThemeColor";
@@ -222,7 +223,10 @@ function ConfiguredSettingsRouteScreen() {
         const error = squashAtomCommandFailure(result);
         Alert.alert(
           "Notifications unavailable",
-          error instanceof Error ? error.message : "Could not request notification permission.",
+          presentUserFacingError(
+            error instanceof Error ? error.message : null,
+            "Could not request notification permission.",
+          ),
         );
       }
       return;
@@ -294,7 +298,10 @@ function ConfiguredSettingsRouteScreen() {
       const error = squashAtomCommandFailure(tokenResult);
       Alert.alert(
         "Live Activities unavailable",
-        error instanceof Error ? error.message : "Could not enable Live Activity updates.",
+        presentUserFacingError(
+          error instanceof Error ? error.message : null,
+          "Could not enable Live Activity updates.",
+        ),
       );
       return;
     }
@@ -320,7 +327,10 @@ function ConfiguredSettingsRouteScreen() {
         const error = squashAtomCommandFailure(updateResult);
         Alert.alert(
           "Live Activities unavailable",
-          error instanceof Error ? error.message : "Could not enable Live Activity updates.",
+          presentUserFacingError(
+            error instanceof Error ? error.message : null,
+            "Could not enable Live Activity updates.",
+          ),
         );
       }
       return;
@@ -604,7 +614,8 @@ function AppSettingsSection() {
     updateInFlight.current = true;
     try {
       await runAppUpdateCheck({
-        onFailure: (message) => Alert.alert("Update failed", message),
+        onFailure: (message) =>
+          Alert.alert("Update failed", presentUserFacingError(message, "Update failed.")),
         onStateChange: setUpdateState,
       });
     } finally {

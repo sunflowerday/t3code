@@ -7,12 +7,14 @@ import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, View } from 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { cn } from "../../lib/cn";
+import { presentUserFacingError } from "../../lib/userFacingError";
 
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { AppText as Text } from "../../components/AppText";
 import { ProjectFavicon } from "../../components/ProjectFavicon";
 import { useProjects, useThreadShells } from "../../state/entities";
 import type { WorkspaceState } from "../../state/workspaceModel";
+import { hasConfirmedEnvironmentFailure } from "../../state/environmentAvailability";
 import { useWorkspaceState } from "../../state/workspace";
 import { groupProjectsByRepository } from "../../lib/repositoryGroups";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
@@ -22,7 +24,7 @@ type NewTaskRouteParams = {
   readonly incomingShareId?: string | string[];
 };
 
-function deriveProjectEmptyState(catalogState: WorkspaceState): {
+export function deriveProjectEmptyState(catalogState: WorkspaceState): {
   readonly title: string;
   readonly detail: string;
   readonly loading: boolean;
@@ -42,13 +44,7 @@ function deriveProjectEmptyState(catalogState: WorkspaceState): {
       loading: false,
     };
   }
-
-  if (
-    (catalogState.connectionState === "available" ||
-      catalogState.connectionState === "offline" ||
-      catalogState.connectionState === "error") &&
-    !catalogState.hasLoadedShellSnapshot
-  ) {
+  if (hasConfirmedEnvironmentFailure(catalogState)) {
     return {
       title: "Environment unavailable",
       detail:
@@ -144,9 +140,10 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
       } catch (error) {
         Alert.alert(
           "Could not change project",
-          error instanceof Error
-            ? error.message
-            : "The shared content reservation could not be updated.",
+          presentUserFacingError(
+            error instanceof Error ? error.message : null,
+            "The shared content reservation could not be updated.",
+          ),
         );
         return;
       }

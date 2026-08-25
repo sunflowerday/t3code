@@ -57,6 +57,26 @@ describe("workspace connection status", () => {
     expect(workspaceConnectionStatusLabel(state)).toBe("Reconnecting to Julius’s Mac mini");
   });
 
+  it("does not hide a known failure behind a reconnecting label", () => {
+    const state = workspaceState({
+      connectionError: "Connection timed out.",
+      hasConnectingEnvironment: true,
+      connectingEnvironments: [
+        {
+          environmentId: "environment-1" as never,
+          environmentLabel: "Julius’s Mac mini",
+          displayUrl: "",
+          isRelayManaged: false,
+          connectionState: "reconnecting",
+          connectionError: "Connection timed out.",
+          connectionErrorTraceId: null,
+        },
+      ],
+    });
+
+    expect(workspaceConnectionStatusLabel(state)).toBe("Connection timed out.");
+  });
+
   it("surfaces connection errors before the generic disconnected fallback", () => {
     const state = workspaceState({
       connectionError: "Could not reach Julius’s Mac mini",

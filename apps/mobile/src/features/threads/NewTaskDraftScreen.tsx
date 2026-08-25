@@ -43,7 +43,12 @@ import {
   type ComposerDraft,
 } from "../../state/use-composer-drafts";
 import { useEnvironmentServerConfig, useProjects } from "../../state/entities";
-import { buildModelMenuActions, resolveSelectableModelSelection } from "../../lib/modelOptions";
+import {
+  buildModelMenuActions,
+  modelCatalogStatus,
+  resolveSelectableModelSelection,
+} from "../../lib/modelOptions";
+import { presentUserFacingError } from "../../lib/userFacingError";
 import { deriveThreadTitleFromPrompt } from "../../lib/projectThreadStartTurn";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { enqueueThreadOutboxMessage, removeThreadOutboxMessage } from "../../state/thread-outbox";
@@ -93,6 +98,10 @@ export function NewTaskDraftScreen(props: {
   const { connectedEnvironments } = useRemoteConnectionStatus();
   const selectedEnvironmentServerConfig = useEnvironmentServerConfig(
     selectedProject?.environmentId ?? null,
+  );
+  const catalogStatus = useMemo(
+    () => modelCatalogStatus(selectedEnvironmentServerConfig),
+    [selectedEnvironmentServerConfig],
   );
   const environmentConnected =
     selectedProject !== null &&
@@ -413,7 +422,10 @@ export function NewTaskDraftScreen(props: {
         }
         Alert.alert(
           "Could not import shared content",
-          error instanceof Error ? error.message : "The shared content could not be saved.",
+          presentUserFacingError(
+            error instanceof Error ? error.message : null,
+            "The shared content could not be saved.",
+          ),
           [
             {
               text: "Cancel import",
@@ -450,9 +462,10 @@ export function NewTaskDraftScreen(props: {
                     }
                     Alert.alert(
                       "Could not cancel import",
-                      cancelError instanceof Error
-                        ? cancelError.message
-                        : "The shared content could not be restored safely.",
+                      presentUserFacingError(
+                        cancelError instanceof Error ? cancelError.message : null,
+                        "The shared content could not be restored safely.",
+                      ),
                       [
                         {
                           text: "Retry import",
@@ -462,24 +475,16 @@ export function NewTaskDraftScreen(props: {
                             setShareImportAttempt((attempt) => attempt + 1);
                           },
                         },
-                        {
-                          text: "Retry cancel",
-                          onPress: () => void cancelImport(),
-                        },
+                        { text: "Dismiss", style: "cancel" },
                       ],
-                      { cancelable: false },
                     );
                   }
                 };
                 void cancelImport();
               },
             },
-            {
-              text: "Retry",
-              onPress: () => setShareImportAttempt((attempt) => attempt + 1),
-            },
+            { text: "Dismiss", style: "cancel" },
           ],
-          { cancelable: false },
         );
       })
       .finally(() => {
@@ -693,6 +698,13 @@ export function NewTaskDraftScreen(props: {
     flow.setSelectedModelKey(event.slice("model:".length));
   }
 
+  function handleModelCatalogIssue() {
+    if (catalogStatus.kind === "available") {
+      return;
+    }
+    Alert.alert(catalogStatus.title, catalogStatus.detail);
+  }
+
   function handleEnvironmentMenuAction(event: string) {
     if (isIncomingShareTransferPending || !event.startsWith("environment:")) {
       return;
@@ -829,7 +841,10 @@ export function NewTaskDraftScreen(props: {
       } catch (error) {
         Alert.alert(
           "Could not queue task",
-          error instanceof Error ? error.message : "The task could not be saved to the outbox.",
+          presentUserFacingError(
+            error instanceof Error ? error.message : null,
+            "The task could not be saved to the outbox.",
+          ),
         );
         return;
       } finally {
@@ -885,7 +900,10 @@ export function NewTaskDraftScreen(props: {
         const error = squashAtomCommandFailure(result);
         Alert.alert(
           "Could not start task",
-          error instanceof Error ? error.message : "The task could not be started.",
+          presentUserFacingError(
+            error instanceof Error ? error.message : null,
+            "The task could not be started.",
+          ),
         );
       }
       return;
@@ -982,17 +1000,30 @@ export function NewTaskDraftScreen(props: {
         showChevron={false}
         disabled={isIncomingShareTransferPending}
       />
-      <ControlPillMenu
-        actions={modelMenuActions}
-        onPressAction={({ nativeEvent }) => handleModelMenuAction(nativeEvent.event)}
-      >
+      {catalogStatus.kind === "available" ? (
+        <ControlPillMenu
+          actions={modelMenuActions}
+          onPressAction={({ nativeEvent }) => handleModelMenuAction(nativeEvent.event)}
+        >
+          <ComposerToolbarTrigger
+            accessibilityLabel="Model"
+            disabled={isIncomingShareTransferPending}
+            iconNode={
+              <ProviderIcon provider={flow.selectedModelOption?.providerDriver} size={16} />
+            }
+            label={flow.selectedModelOption?.label ?? "Model"}
+          />
+        </ControlPillMenu>
+      ) : (
         <ComposerToolbarTrigger
-          accessibilityLabel="Model"
+          accessibilityLabel={catalogStatus.title}
           disabled={isIncomingShareTransferPending}
-          iconNode={<ProviderIcon provider={flow.selectedModelOption?.providerDriver} size={16} />}
-          label={flow.selectedModelOption?.label ?? "Model"}
+          icon="exclamationmark.triangle"
+          label={catalogStatus.label}
+          onPress={handleModelCatalogIssue}
+          showChevron={false}
         />
-      </ControlPillMenu>
+      )}
       <ControlPillMenu
         actions={optionsMenuActions}
         onPressAction={({ nativeEvent }) => handleOptionsMenuAction(nativeEvent.event)}
