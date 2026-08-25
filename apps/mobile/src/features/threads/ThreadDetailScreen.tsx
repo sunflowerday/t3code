@@ -65,6 +65,7 @@ export interface ThreadDetailScreenProps {
   readonly environmentId: EnvironmentId;
   readonly projectWorkspaceRoot: string | null;
   readonly threadCwd: string | null;
+  readonly canBrowseFiles: boolean;
   readonly selectedThreadQueueCount: number;
   readonly serverConfig: T3ServerConfig | null;
   readonly layoutVariant?: LayoutVariant;
@@ -356,6 +357,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
             environmentId={props.environmentId}
             threadId={props.selectedThread.id}
             workspaceRoot={props.threadCwd}
+            canBrowseFiles={props.canBrowseFiles}
             feed={props.selectedThreadFeed}
             contentPresentation={props.contentPresentation}
             agentLabel={agentLabel}

@@ -8,7 +8,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { CommandId, EnvironmentId, MessageId, ThreadId, type ProjectScript } from "@t3tools/contracts";
+import {
+  CommandId,
+  EnvironmentId,
+  MessageId,
+  ThreadId,
+  type ProjectScript,
+} from "@t3tools/contracts";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -529,13 +535,7 @@ function ThreadRouteContent(
         threadId: String(nextThreadId),
       });
     }
-  }, [
-    forkThread,
-    mobileCapabilities.threadFork,
-    navigation,
-    selectedThread,
-    selectedThreadDetail,
-  ]);
+  }, [forkThread, mobileCapabilities.threadFork, navigation, selectedThread, selectedThreadDetail]);
 
   const handleOpenTerminal = useCallback(
     (nextTerminalId?: string | null) => {
@@ -755,8 +755,7 @@ function ThreadRouteContent(
     mobileCapabilities.threadFork &&
     selectedThreadDetail !== null &&
     selectedThreadDetail.messages.some(
-      (message) =>
-        !message.streaming && (message.role === "user" || message.role === "assistant"),
+      (message) => !message.streaming && (message.role === "user" || message.role === "assistant"),
     );
   const mobileThreadHeaderItems: NativeHeaderItems = canForkThread
     ? [
@@ -823,7 +822,10 @@ function ThreadRouteContent(
       {mobileCapabilities.workspace ? (
         <>
           <ThreadGitControls {...threadGitControlProps} showActionControls={showActionControls} />
-          <GitActionProgressOverlay progress={gitActionProgress} onDismiss={dismissGitActionResult} />
+          <GitActionProgressOverlay
+            progress={gitActionProgress}
+            onDismiss={dismissGitActionResult}
+          />
         </>
       ) : null}
 
@@ -850,6 +852,7 @@ function ThreadRouteContent(
           environmentId={selectedThread.environmentId}
           projectWorkspaceRoot={selectedThreadProject?.workspaceRoot ?? null}
           threadCwd={selectedThreadCwd}
+          canBrowseFiles={mobileCapabilities.workspace}
           selectedThreadQueueCount={composer.selectedThreadQueueCount}
           layoutVariant={layout.variant}
           usesAutomaticContentInsets={usesNativeHeaderGlass}
@@ -911,7 +914,9 @@ function ThreadRouteContent(
               ? () =>
                   mobileCapabilities.workspace
                     ? [
-                        ...(layout.usesSplitView ? threadCenterHeaderItems : compactRightHeaderItems),
+                        ...(layout.usesSplitView
+                          ? threadCenterHeaderItems
+                          : compactRightHeaderItems),
                         ...mobileThreadHeaderItems,
                       ]
                     : mobileThreadHeaderItems

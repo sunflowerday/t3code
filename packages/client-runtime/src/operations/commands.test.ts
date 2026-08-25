@@ -1,8 +1,10 @@
 import {
   CommandId,
   EnvironmentId,
+  MessageId,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
+  ProviderInstanceId,
   ThreadId,
   type ClientOrchestrationCommand,
 } from "@t3tools/contracts";
@@ -133,7 +135,7 @@ describe("environment commands", () => {
         sourceThreadId: ThreadId.make("source-thread"),
         projectId: ProjectId.make("project-1"),
         title: "Forked conversation",
-        modelSelection: { instanceId: "codex", model: "gpt-5.6" },
+        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.6" },
         runtimeMode: "approval-required",
         interactionMode: "default",
         branch: null,
@@ -141,7 +143,7 @@ describe("environment commands", () => {
         forkPointMessageId: null,
         importedMessages: [
           {
-            messageId: "fork-message-1",
+            messageId: MessageId.make("fork-message-1"),
             role: "user",
             text: "Keep this context",
             createdAt: "2026-06-06T00:00:00.000Z",

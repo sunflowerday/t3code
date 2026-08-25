@@ -2,7 +2,17 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { ExecutionEnvironmentCapabilities } from "@t3tools/contracts";
 
-import { resolveMobileClientCapabilities } from "./mobileCapabilities";
+import {
+  type MobileClientCapabilities,
+  resolveMobileClientCapabilities,
+} from "./mobileCapabilities";
+
+const MOBILE_CAPABILITIES: ReadonlyArray<keyof MobileClientCapabilities> = [
+  "workspace",
+  "threadLifecycle",
+  "threadSessionStop",
+  "threadFork",
+];
 
 describe("mobile client capabilities", () => {
   it("fails closed when the server does not declare a mobile surface", () => {
@@ -14,22 +24,19 @@ describe("mobile client capabilities", () => {
     });
   });
 
-  it("derives chat-only navigation and session actions from server config", () => {
-    const capabilities = {
-      repositoryIdentity: true,
-      mobileClient: {
-        workspace: false,
-        threadLifecycle: false,
-        threadSessionStop: true,
-        threadFork: true,
-      },
-    } as ExecutionEnvironmentCapabilities;
+  for (const enabledCapability of MOBILE_CAPABILITIES) {
+    it(`maps only the declared ${enabledCapability} capability`, () => {
+      const capabilities = {
+        repositoryIdentity: true,
+        mobileClient: { [enabledCapability]: true },
+      } as ExecutionEnvironmentCapabilities;
 
-    expect(resolveMobileClientCapabilities(capabilities)).toEqual({
-      workspace: false,
-      threadLifecycle: false,
-      threadSessionStop: true,
-      threadFork: true,
+      expect(resolveMobileClientCapabilities(capabilities)).toEqual({
+        workspace: enabledCapability === "workspace",
+        threadLifecycle: enabledCapability === "threadLifecycle",
+        threadSessionStop: enabledCapability === "threadSessionStop",
+        threadFork: enabledCapability === "threadFork",
+      });
     });
-  });
+  }
 });

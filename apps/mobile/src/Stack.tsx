@@ -11,7 +11,7 @@ import {
   type NativeStackNavigationOptions,
 } from "@react-navigation/native-stack";
 import { useAtomValue } from "@effect/atom-react";
-import { useEffect, useRef } from "react";
+import { createElement, useEffect, useRef } from "react";
 import { DynamicColorIOS, Platform, Pressable, ScrollView, StyleSheet } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
@@ -211,7 +211,7 @@ type WorkspaceRouteParams = {
   };
 };
 
-function withMobileWorkspaceCapability<Props>(
+function withMobileWorkspaceCapability<Props extends object>(
   Screen: React.ComponentType<Props>,
 ): React.ComponentType<Props> {
   function MobileWorkspaceScreen(props: Props) {
@@ -229,7 +229,7 @@ function withMobileWorkspaceCapability<Props>(
               resolveMobileClientCapabilities(config.environment.capabilities).workspace,
           );
 
-    return workspaceAvailable ? <Screen {...props} /> : <NotFoundScreen />;
+    return workspaceAvailable ? createElement(Screen, props) : <NotFoundScreen />;
   }
 
   return MobileWorkspaceScreen;
@@ -423,7 +423,6 @@ function NotFoundScreen() {
     </ScrollView>
   );
 }
-
 
 export const RootStack = createNativeStackNavigator({
   initialRouteName: "Home",

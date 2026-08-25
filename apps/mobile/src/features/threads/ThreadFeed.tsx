@@ -152,6 +152,7 @@ export interface ThreadFeedProps {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly workspaceRoot?: string | null;
+  readonly canBrowseFiles: boolean;
   readonly feed: ReadonlyArray<ThreadFeedEntry>;
   readonly contentPresentation: ThreadContentPresentation;
   readonly agentLabel: string;
@@ -450,7 +451,10 @@ function useReviewCommentColors(): ReviewCommentColors {
   );
 }
 
-function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSets {
+function useMarkdownStyles(
+  onLinkPress: (href: string) => void,
+  canBrowseFiles: boolean,
+): MarkdownStyleSets {
   const colorScheme = useColorScheme();
   const { appearance } = useAppearancePreferences();
   const markdownFontSizes = useMemo(
@@ -583,6 +587,9 @@ function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSe
       link: ({ children, href = "" }) => {
         const presentation = resolveMarkdownLinkPresentation(href);
         if (presentation.kind === "file") {
+          if (!canBrowseFiles) {
+            return <NativeText style={{ color: inlineTextColor }}>{presentation.label}</NativeText>;
+          }
           return (
             <NativeText
               className="font-t3-bold"
@@ -808,6 +815,7 @@ function useMarkdownStyles(onLinkPress: (href: string) => void): MarkdownStyleSe
       },
     };
   }, [
+    canBrowseFiles,
     boldFontFamily,
     colors,
     iconSubtleColor,
@@ -1398,7 +1406,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
           props.workspaceRoot,
           presentation.path,
         );
-        if (relativePath) {
+        if (relativePath && props.canBrowseFiles) {
           void Haptics.selectionAsync();
           navigation.navigate("ThreadFile", {
             environmentId: String(props.environmentId),
@@ -1414,9 +1422,9 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         void Linking.openURL(presentation.href);
       }
     },
-    [props.environmentId, props.threadId, props.workspaceRoot, navigation],
+    [props.canBrowseFiles, props.environmentId, props.threadId, props.workspaceRoot, navigation],
   );
-  const markdownStyles = useMarkdownStyles(onMarkdownLinkPress);
+  const markdownStyles = useMarkdownStyles(onMarkdownLinkPress, props.canBrowseFiles);
   const reviewCommentColors = useReviewCommentColors();
   // LegendList does not invalidate visible rows when only the renderItem closure changes.
   // Keep row-local interaction props in extraData so disclosures and copy feedback repaint.

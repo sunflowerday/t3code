@@ -31,7 +31,18 @@ export function buildThreadForkImportedMessages(input: {
 }
 
 export function buildThreadForkInput(input: {
-  readonly source: OrchestrationThread;
+  readonly source: Pick<
+    OrchestrationThread,
+    | "id"
+    | "projectId"
+    | "title"
+    | "modelSelection"
+    | "runtimeMode"
+    | "interactionMode"
+    | "branch"
+    | "worktreePath"
+    | "messages"
+  >;
   readonly commandId: CommandId;
   readonly threadId: ThreadId;
   readonly createdAt: string;
