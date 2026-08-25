@@ -1,5 +1,6 @@
 import type { RelayEnvironmentStatusResponse } from "@t3tools/contracts/relay";
 import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+import { presentUserFacingError } from "../../lib/userFacingError";
 
 export interface AvailableCloudEnvironmentPresentation {
   readonly connectionError: string | null;
@@ -24,7 +25,7 @@ export function availableCloudEnvironmentPresentation(input: {
   }
 
   if (input.status?.status === "offline") {
-    const connectionError = input.status.error ?? "Relay is offline.";
+    const connectionError = presentUserFacingError(input.status.error, "Relay is offline.")!;
     return {
       connectionError,
       connectionErrorTraceId: input.status.traceId ?? null,
@@ -34,11 +35,15 @@ export function availableCloudEnvironmentPresentation(input: {
   }
 
   if (input.statusError) {
+    const connectionError = presentUserFacingError(
+      input.statusError,
+      "Could not get relay environment status.",
+    )!;
     return {
-      connectionError: input.statusError,
+      connectionError,
       connectionErrorTraceId: input.statusErrorTraceId,
       connectionState: "error",
-      statusText: input.statusError,
+      statusText: connectionError,
     };
   }
 

@@ -12,6 +12,7 @@ import { useThemeColor } from "../../lib/useThemeColor";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
 import { cn } from "../../lib/cn";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
+import { isConnectionRetrying, presentUserFacingError } from "../../lib/userFacingError";
 import type { ConnectedEnvironmentSummary } from "../../state/remote-runtime-types";
 import { ConnectionStatusDot } from "./ConnectionStatusDot";
 
@@ -43,9 +44,10 @@ export function ConnectionEnvironmentRow(props: {
   const statusLabel = connectionStatusLabel(props.environment);
   const statusTraceId = props.environment.connectionErrorTraceId;
   const hasConnectionFailure = props.environment.connectionError !== null;
-  const isRetrying =
-    props.environment.connectionState === "connecting" ||
-    props.environment.connectionState === "reconnecting";
+  const isRetryingConnection = isConnectionRetrying(
+    props.environment.connectionState,
+    props.environment.connectionError,
+  );
   const handleSave = useCallback(async () => {
     const result = await props.onUpdate(props.environment.environmentId, {
       label: label.trim(),
@@ -58,7 +60,10 @@ export function ConnectionEnvironmentRow(props: {
     const error = Cause.squash(result.cause);
     Alert.alert(
       "Could not update environment",
-      error instanceof Error ? error.message : "The environment could not be updated.",
+      presentUserFacingError(
+        error instanceof Error ? error.message : null,
+        "The environment could not be updated.",
+      ),
     );
   }, [label, url, props]);
 
@@ -70,7 +75,7 @@ export function ConnectionEnvironmentRow(props: {
       >
         <ConnectionStatusDot
           state={props.environment.connectionState}
-          pulse={isRetrying}
+          pulse={isRetryingConnection}
           size={8}
         />
 

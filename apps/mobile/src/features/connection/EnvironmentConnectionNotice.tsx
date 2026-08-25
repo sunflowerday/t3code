@@ -8,8 +8,16 @@ import { ActivityIndicator, Pressable, View } from "react-native";
 import { AppText as Text } from "../../components/AppText";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { useThemeColor } from "../../lib/useThemeColor";
+import { isConnectionRetrying, presentUserFacingError } from "../../lib/userFacingError";
 
-function noticeTitle(phase: EnvironmentConnectionPhase, environmentLabel: string): string {
+function noticeTitle(
+  phase: EnvironmentConnectionPhase,
+  environmentLabel: string,
+  error: string | null,
+): string {
+  if (error !== null && (phase === "connecting" || phase === "reconnecting")) {
+    return `Could not reconnect to ${environmentLabel}`;
+  }
   switch (phase) {
     case "offline":
       return "You are offline";
@@ -31,8 +39,9 @@ function noticeDetail(
   resourceName: string,
   error: string | null,
 ): string {
-  if (error) {
-    return `The app will keep retrying automatically. ${error}`;
+  const userFacingError = presentUserFacingError(error);
+  if (userFacingError) {
+    return `The connection failed. Retry now, or check the environment settings. ${userFacingError}`;
   }
 
   switch (phase) {
@@ -56,8 +65,7 @@ export function EnvironmentConnectionNotice(props: {
   readonly onRetry: () => void;
 }) {
   const iconColor = String(useThemeColor("--color-icon-muted"));
-  const isRetrying =
-    props.connection.phase === "connecting" || props.connection.phase === "reconnecting";
+  const isRetrying = isConnectionRetrying(props.connection.phase, props.connection.error);
 
   return (
     <View className="flex-1 items-center justify-center px-8">
@@ -74,7 +82,7 @@ export function EnvironmentConnectionNotice(props: {
         )}
 
         <Text className="text-center text-lg font-t3-bold text-foreground">
-          {noticeTitle(props.connection.phase, props.environmentLabel)}
+          {noticeTitle(props.connection.phase, props.environmentLabel, props.connection.error)}
         </Text>
         <Text className="text-center text-sm leading-normal text-foreground-muted">
           {noticeDetail(props.connection.phase, props.resourceName, props.connection.error)}

@@ -17,6 +17,7 @@ import {
 } from "../state/environments";
 import { useWorkspaceState } from "../state/workspace";
 import type { SavedRemoteConnection } from "../lib/connection";
+import { presentUserFacingError } from "../lib/userFacingError";
 import { appAtomRegistry } from "./atom-registry";
 import type { ConnectedEnvironmentSummary, EnvironmentRuntimeState } from "./remote-runtime-types";
 import { environmentSession, usePreparedConnection } from "./session";
@@ -31,9 +32,8 @@ const pendingConnectionErrorAtom = Atom.make<string | null>(null).pipe(
   Atom.keepAlive,
   Atom.withLabel("mobile:pending-connection-error"),
 );
-
 export function setPendingConnectionError(message: string | null): void {
-  appAtomRegistry.set(pendingConnectionErrorAtom, message);
+  appAtomRegistry.set(pendingConnectionErrorAtom, presentUserFacingError(message));
 }
 
 function toSavedConnection(
@@ -89,7 +89,7 @@ function toRuntimeState(
 ): EnvironmentRuntimeState {
   return {
     connectionState: environment.connection.phase,
-    connectionError: environment.connection.error,
+    connectionError: presentUserFacingError(environment.connection.error),
     connectionErrorTraceId: environment.connection.traceId,
     serverConfig,
   };
@@ -168,8 +168,10 @@ export function useRemoteConnections() {
       const result = await controller.connectPairingUrl(nextPairingUrl);
       if (AsyncResult.isFailure(result)) {
         const error = Cause.squash(result.cause);
-        const message =
-          error instanceof Error ? error.message : "Failed to pair with the environment.";
+        const message = presentUserFacingError(
+          error instanceof Error ? error.message : null,
+          "Failed to pair with the environment.",
+        );
         setPendingConnectionError(message);
       } else {
         appAtomRegistry.set(connectionPairingUrlAtom, "");

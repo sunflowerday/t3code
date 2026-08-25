@@ -9,6 +9,7 @@ import {
 } from "expo-sharing";
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Platform } from "react-native";
+import { presentUserFacingError } from "../../lib/userFacingError";
 
 import {
   buildIncomingShareDraft,
@@ -238,16 +239,20 @@ export function IncomingShareProvider(props: React.PropsWithChildren) {
     if (!error) {
       return;
     }
-    Alert.alert("Could not import shared content", error.message, [
-      { text: "Dismiss", style: "cancel", onPress: () => setError(null) },
-      {
-        text: "Retry",
-        onPress: () => {
-          setError(null);
-          void refresh();
+    Alert.alert(
+      "Could not import shared content",
+      presentUserFacingError(error.message, "The shared content could not be imported."),
+      [
+        { text: "Dismiss", style: "cancel", onPress: () => setError(null) },
+        {
+          text: "Retry",
+          onPress: () => {
+            setError(null);
+            void refresh();
+          },
         },
-      },
-    ]);
+      ],
+    );
   }, [error, refresh]);
 
   const consumeShare = useCallback(async (shareId: string) => {

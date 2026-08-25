@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 
 import { projectThreadContentPresentation } from "./threadContentPresentation";
+import { GENERIC_ACTIONABLE_ERROR } from "../../lib/userFacingError";
 
 describe("thread content presentation", () => {
   it("renders cached detail while its environment reconnects", () => {
@@ -52,6 +53,21 @@ describe("thread content presentation", () => {
       kind: "unavailable",
       title: "Could not load conversation",
       detail: "The thread stream failed.",
+    });
+  });
+
+  it("replaces an internal thread error identifier with an actionable message", () => {
+    expect(
+      projectThreadContentPresentation({
+        hasDetail: false,
+        detailError: "synara.engine/engine.request_failed",
+        detailDeleted: false,
+        connectionState: "connected",
+      }),
+    ).toEqual({
+      kind: "unavailable",
+      title: "Could not load conversation",
+      detail: GENERIC_ACTIONABLE_ERROR,
     });
   });
 });

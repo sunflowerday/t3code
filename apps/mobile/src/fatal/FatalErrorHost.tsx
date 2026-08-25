@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "../components/AppText";
@@ -33,18 +33,11 @@ export function FatalErrorHost(props: { readonly onGoHome: () => void }) {
       <View className="max-h-full w-full self-center rounded-[24px] bg-card px-5 pb-4 pt-5">
         <Text className="text-lg font-t3-medium">Something went wrong</Text>
         <Text className="mt-2 text-sm text-foreground-secondary">
-          The app caught an unexpected error and stayed open. The original message is below.
+          The app caught an unexpected error and stayed open. Try again, or return home.
         </Text>
         <View className="mt-4">
           <ErrorBanner message={record.message} />
         </View>
-        {record.stack === null ? null : (
-          <ScrollView className="mt-3 max-h-48" nestedScrollEnabled>
-            <Text selectable className="font-mono text-xs text-foreground-muted">
-              {record.stack}
-            </Text>
-          </ScrollView>
-        )}
         <Text className="mt-3 text-xs text-foreground-muted">{record.occurredAt}</Text>
         <View className="mt-5 flex-row justify-end gap-1">
           <View className="overflow-hidden rounded-full">

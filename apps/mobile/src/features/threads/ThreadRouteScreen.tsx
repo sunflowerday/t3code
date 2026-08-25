@@ -60,6 +60,7 @@ import { useSelectedThreadWorktree } from "../../state/use-selected-thread-workt
 import { useThreadComposerState } from "../../state/use-thread-composer-state";
 import { threadEnvironment } from "../../state/threads";
 import { projectThreadContentPresentation } from "./threadContentPresentation";
+import { shouldShowOpeningThreadLoading } from "./threadRoutePresentation";
 import {
   useAdaptiveWorkspaceLayout,
   useAdaptiveWorkspacePaneRole,
@@ -106,7 +107,10 @@ interface ThreadRouteScreenProps extends ThreadRouteScreenRouteProps {
   readonly renderInspector?: (headerInset: number) => ReactNode;
 }
 
-function ThreadUnavailableScreen() {
+function ThreadUnavailableScreen(props: {
+  readonly detail?: string;
+  readonly onRetry?: () => void;
+}) {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
@@ -119,8 +123,10 @@ function ThreadUnavailableScreen() {
       className="bg-screen flex-1"
     >
       <EmptyState
-        title="Thread unavailable"
-        detail="This thread is not available in the current mobile snapshot."
+        title={props.detail ? "Could not open thread" : "Thread unavailable"}
+        detail={props.detail ?? "This thread is not available in the current mobile snapshot."}
+        actionLabel={props.onRetry ? "Retry" : undefined}
+        onAction={props.onRetry}
       />
     </ScrollView>
   );
@@ -129,6 +135,7 @@ function ThreadUnavailableScreen() {
 export function ThreadRouteScreen(props: ThreadRouteScreenProps) {
   const { state: workspaceState } = useWorkspaceState();
   const { connectionState } = useRemoteConnectionStatus();
+  const { onReconnectEnvironment } = useRemoteConnections();
   const { selectedThread } = useThreadSelection();
   const params = props.route.params;
   const environmentIdRaw = firstRouteParam(params.environmentId);
@@ -137,6 +144,7 @@ export function ThreadRouteScreen(props: ThreadRouteScreenProps) {
   const routeEnvironmentRuntime = useRemoteEnvironmentRuntime(environmentId);
   const routeConnectionState =
     routeEnvironmentRuntime?.connectionState ?? (environmentId ? "available" : connectionState);
+  const routeConnectionError = routeEnvironmentRuntime?.connectionError ?? null;
   const routeThreadKey =
     environmentId !== null && threadIdRaw !== null
       ? scopedThreadKey(environmentId, ThreadId.make(threadIdRaw))
@@ -159,13 +167,23 @@ export function ThreadRouteScreen(props: ThreadRouteScreenProps) {
     return <ThreadRouteContent {...props} selectedThreadDetailState={selectedThreadDetailState} />;
   }
 
-  const stillHydrating =
-    workspaceState.isLoadingConnections ||
-    routeConnectionState === "connecting" ||
-    routeConnectionState === "reconnecting";
+  const stillHydrating = shouldShowOpeningThreadLoading({
+    connectionError: routeConnectionError,
+    connectionState: routeConnectionState,
+    isLoadingConnections: workspaceState.isLoadingConnections,
+  });
 
   if (stillHydrating) {
     return <OpeningThreadLoadingScreen />;
+  }
+
+  if (routeConnectionError) {
+    return (
+      <ThreadUnavailableScreen
+        detail={`Could not connect to the environment. ${routeConnectionError}`}
+        onRetry={() => onReconnectEnvironment(environmentId)}
+      />
+    );
   }
 
   return <ThreadUnavailableScreen />;
