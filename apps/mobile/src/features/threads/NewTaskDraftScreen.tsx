@@ -28,6 +28,7 @@ import { ComposerSurface } from "./ThreadComposer";
 
 import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
 import { convertPastedImagesToAttachments, pickComposerImages } from "../../lib/composerImages";
+import { resolveMobileClientCapabilities } from "../../lib/mobileCapabilities";
 import {
   applyProviderOptionMenuEvent,
   buildProviderOptionMenuActions,
@@ -99,6 +100,9 @@ export function NewTaskDraftScreen(props: {
   const selectedEnvironmentServerConfig = useEnvironmentServerConfig(
     selectedProject?.environmentId ?? null,
   );
+  const workspaceSupported = resolveMobileClientCapabilities(
+    selectedEnvironmentServerConfig?.environment.capabilities,
+  ).workspace;
   const catalogStatus = useMemo(
     () => modelCatalogStatus(selectedEnvironmentServerConfig),
     [selectedEnvironmentServerConfig],
@@ -308,7 +312,7 @@ export function NewTaskDraftScreen(props: {
   ]);
 
   useEffect(() => {
-    if (!selectedProject) {
+    if (!workspaceSupported || !selectedProject) {
       loadedBranchesProjectKeyRef.current = null;
       return;
     }
@@ -318,7 +322,7 @@ export function NewTaskDraftScreen(props: {
     }
     loadedBranchesProjectKeyRef.current = projectKey;
     void flow.loadBranches();
-  }, [flow.loadBranches, selectedProject]);
+  }, [flow.loadBranches, selectedProject, workspaceSupported]);
 
   useEffect(() => {
     const shareId = props.incomingShareId;
@@ -1046,17 +1050,19 @@ export function NewTaskDraftScreen(props: {
           label={selectedEnvironmentLabel}
         />
       </ControlPillMenu>
-      <ControlPillMenu
-        actions={workspaceMenuActions}
-        onPressAction={({ nativeEvent }) => handleWorkspaceMenuAction(nativeEvent.event)}
-      >
-        <ComposerToolbarTrigger
-          accessibilityLabel="Workspace"
-          disabled={isIncomingShareTransferPending}
-          icon="point.topleft.down.curvedto.point.bottomright.up"
-          label={workspaceLabel}
-        />
-      </ControlPillMenu>
+      {workspaceSupported ? (
+        <ControlPillMenu
+          actions={workspaceMenuActions}
+          onPressAction={({ nativeEvent }) => handleWorkspaceMenuAction(nativeEvent.event)}
+        >
+          <ComposerToolbarTrigger
+            accessibilityLabel="Workspace"
+            disabled={isIncomingShareTransferPending}
+            icon="point.topleft.down.curvedto.point.bottomright.up"
+            label={workspaceLabel}
+          />
+        </ControlPillMenu>
+      ) : null}
     </>
   );
 

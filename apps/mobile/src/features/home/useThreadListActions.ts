@@ -7,6 +7,7 @@ import { Alert } from "react-native";
 
 import { showConfirmDialog } from "../../components/ConfirmDialogHost";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import { resolveMobileClientCapabilities } from "../../lib/mobileCapabilities";
 import { presentUserFacingError } from "../../lib/userFacingError";
 import { refreshArchivedThreadsForEnvironment } from "../archive/useArchivedThreadSnapshots";
 import { appAtomRegistry } from "../../state/atom-registry";
@@ -17,16 +18,22 @@ import { useAtomCommand } from "../../state/use-atom-command";
 /** Version skew: never send settle/unsettle to a server that predates them
     (capability defaults false on decode for older servers). */
 function environmentSupportsSettlement(environmentId: EnvironmentThreadShell["environmentId"]) {
+  const capabilities = appAtomRegistry
+    .get(environmentServerConfigsAtom)
+    .get(environmentId)?.environment.capabilities;
   return (
-    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
-      .threadSettlement === true
+    capabilities?.threadSettlement === true &&
+    resolveMobileClientCapabilities(capabilities).threadLifecycle
   );
 }
 
 function environmentSupportsSnooze(environmentId: EnvironmentThreadShell["environmentId"]) {
+  const capabilities = appAtomRegistry
+    .get(environmentServerConfigsAtom)
+    .get(environmentId)?.environment.capabilities;
   return (
-    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
-      .threadSnooze === true
+    capabilities?.threadSnooze === true &&
+    resolveMobileClientCapabilities(capabilities).threadLifecycle
   );
 }
 

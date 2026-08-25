@@ -10,7 +10,8 @@ import {
   createNativeStackScreen,
   type NativeStackNavigationOptions,
 } from "@react-navigation/native-stack";
-import { useEffect, useRef } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { createElement, useEffect, useRef } from "react";
 import { DynamicColorIOS, Platform, Pressable, ScrollView, StyleSheet } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
@@ -62,6 +63,8 @@ import {
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "./native/native-glass";
 import { nativeHeaderScrollEdgeEffects } from "./native/StackHeader";
 import { useThreadOutboxDrain } from "./state/use-thread-outbox-drain";
+import { resolveMobileClientCapabilities } from "./lib/mobileCapabilities";
+import { environmentServerConfigsAtom } from "./state/server";
 
 const HEADER_SCROLL_EDGE_EFFECTS = nativeHeaderScrollEdgeEffects(Platform.OS, Platform.Version);
 
@@ -200,11 +203,53 @@ const SettingsSheetStack = createNativeStackNavigator({
   },
 });
 
-// Thread routes live FLAT in the root stack (not in a nested navigator). A nested
-// stack means a second UINavigationController with its own UINavigationBar, which
-// breaks iOS 26's shared-header morphing between Home and Thread (each pair inside
-// one bar morphs; across two bars the whole screen slides). Flat linking paths keep
-// the same deep-link URLs the nested config produced.
+type WorkspaceRouteParams = {
+  readonly route?: {
+    readonly params?: {
+      readonly environmentId?: string | ReadonlyArray<string>;
+    };
+  };
+};
+
+function withMobileWorkspaceCapability<Props extends object>(
+  Screen: React.ComponentType<Props>,
+): React.ComponentType<Props> {
+  function MobileWorkspaceScreen(props: Props) {
+    const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+    const environmentId = (props as unknown as WorkspaceRouteParams).route?.params?.environmentId;
+    const rawEnvironmentId = Array.isArray(environmentId) ? environmentId[0] : environmentId;
+    const workspaceAvailable =
+      rawEnvironmentId === undefined
+        ? [...serverConfigs.values()].some(
+            (config) => resolveMobileClientCapabilities(config.environment.capabilities).workspace,
+          )
+        : [...serverConfigs].some(
+            ([id, config]) =>
+              String(id) === rawEnvironmentId &&
+              resolveMobileClientCapabilities(config.environment.capabilities).workspace,
+          );
+
+    return workspaceAvailable ? createElement(Screen, props) : <NotFoundScreen />;
+  }
+
+  return MobileWorkspaceScreen;
+}
+
+const MobileThreadTerminalRoute = withMobileWorkspaceCapability(ThreadTerminalRouteScreen);
+const MobileThreadReviewRoute = withMobileWorkspaceCapability(ReviewSheet);
+const MobileThreadReviewCommentRoute = withMobileWorkspaceCapability(ReviewCommentComposerSheet);
+const MobileThreadFilesRoute = withMobileWorkspaceCapability(ThreadFilesTreeScreen);
+const MobileThreadFileRoute = withMobileWorkspaceCapability(ThreadFileScreen);
+const MobileGitOverviewRoute = withMobileWorkspaceCapability(GitOverviewSheet);
+const MobileGitCommitRoute = withMobileWorkspaceCapability(GitCommitSheet);
+const MobileGitBranchesRoute = withMobileWorkspaceCapability(GitBranchesSheet);
+const MobileGitConfirmRoute = withMobileWorkspaceCapability(GitConfirmSheet);
+const MobileAddProjectSourceRoute = withMobileWorkspaceCapability(AddProjectSourceRoute);
+const MobileAddProjectRepositoryRoute = withMobileWorkspaceCapability(AddProjectRepositoryRoute);
+const MobileAddProjectDestinationRoute = withMobileWorkspaceCapability(AddProjectDestinationRoute);
+const MobileAddProjectLocalRoute = withMobileWorkspaceCapability(AddProjectLocalRoute);
+// Thread routes live flat in the root stack so iOS can preserve the shared
+// native-header transition between Home and a thread.
 const THREAD_LINKING_PREFIX = "threads/:environmentId/:threadId";
 
 // New-task / add-project flow: nested navigator inside the formSheet (Settings-sheet
@@ -233,22 +278,22 @@ const NewTaskSheetStack = createNativeStackNavigator({
       options: SHEET_SOLID_HEADER_OPTIONS,
     }),
     AddProject: createNativeStackScreen({
-      screen: AddProjectSourceRoute,
+      screen: MobileAddProjectSourceRoute,
       linking: "add-project",
       options: {
         title: "Add Project",
       },
     }),
     AddProjectRepository: createNativeStackScreen({
-      screen: AddProjectRepositoryRoute,
+      screen: MobileAddProjectRepositoryRoute,
       linking: "add-project/repository",
     }),
     AddProjectDestination: createNativeStackScreen({
-      screen: AddProjectDestinationRoute,
+      screen: MobileAddProjectDestinationRoute,
       linking: "add-project/destination",
     }),
     AddProjectLocal: createNativeStackScreen({
-      screen: AddProjectLocalRoute,
+      screen: MobileAddProjectLocalRoute,
       linking: "add-project/local",
     }),
   },
@@ -402,17 +447,17 @@ export const RootStack = createNativeStackNavigator({
       options: GLASS_HEADER_OPTIONS,
     }),
     ThreadTerminal: createNativeStackScreen({
-      screen: ThreadTerminalRouteScreen,
+      screen: MobileThreadTerminalRoute,
       linking: `${THREAD_LINKING_PREFIX}/terminal`,
       options: SOLID_HEADER_OPTIONS,
     }),
     ThreadReview: createNativeStackScreen({
-      screen: ReviewSheet,
+      screen: MobileThreadReviewRoute,
       linking: `${THREAD_LINKING_PREFIX}/review`,
       options: SOLID_HEADER_OPTIONS,
     }),
     ThreadReviewComment: createNativeStackScreen({
-      screen: ReviewCommentComposerSheet,
+      screen: MobileThreadReviewCommentRoute,
       linking: `${THREAD_LINKING_PREFIX}/review-comment`,
       options: {
         // Android cannot host the keyboard-driven comment composer inside a
@@ -423,7 +468,7 @@ export const RootStack = createNativeStackNavigator({
       },
     }),
     ThreadFiles: createNativeStackScreen({
-      screen: ThreadFilesTreeScreen,
+      screen: MobileThreadFilesRoute,
       linking: `${THREAD_LINKING_PREFIX}/files`,
       options: {
         ...GLASS_HEADER_OPTIONS,
@@ -435,12 +480,12 @@ export const RootStack = createNativeStackNavigator({
       },
     }),
     ThreadFile: createNativeStackScreen({
-      screen: ThreadFileScreen,
+      screen: MobileThreadFileRoute,
       linking: `${THREAD_LINKING_PREFIX}/files/:path*`,
       options: SOLID_HEADER_OPTIONS,
     }),
     GitOverview: createNativeStackScreen({
-      screen: GitOverviewSheet,
+      screen: MobileGitOverviewRoute,
       linking: `${THREAD_LINKING_PREFIX}/git`,
       options: {
         presentation: "formSheet",
@@ -449,7 +494,7 @@ export const RootStack = createNativeStackNavigator({
       },
     }),
     GitCommit: createNativeStackScreen({
-      screen: GitCommitSheet,
+      screen: MobileGitCommitRoute,
       linking: `${THREAD_LINKING_PREFIX}/git/commit`,
       options: {
         presentation: "formSheet",
@@ -458,7 +503,7 @@ export const RootStack = createNativeStackNavigator({
       },
     }),
     GitBranches: createNativeStackScreen({
-      screen: GitBranchesSheet,
+      screen: MobileGitBranchesRoute,
       linking: `${THREAD_LINKING_PREFIX}/git/branches`,
       options: {
         presentation: "formSheet",
@@ -467,7 +512,7 @@ export const RootStack = createNativeStackNavigator({
       },
     }),
     GitConfirm: createNativeStackScreen({
-      screen: GitConfirmSheet,
+      screen: MobileGitConfirmRoute,
       linking: `${THREAD_LINKING_PREFIX}/git-confirm`,
       options: {
         presentation: "formSheet",

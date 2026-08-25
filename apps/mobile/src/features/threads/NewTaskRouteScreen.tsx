@@ -2,10 +2,12 @@ import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/Stac
 import { useIsFocused, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { SymbolView } from "../../components/AppSymbol";
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
 import { useEffect, useMemo, useRef } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "../../lib/useThemeColor";
+import { resolveMobileClientCapabilities } from "../../lib/mobileCapabilities";
 import { cn } from "../../lib/cn";
 import { presentUserFacingError } from "../../lib/userFacingError";
 
@@ -15,6 +17,7 @@ import { ProjectFavicon } from "../../components/ProjectFavicon";
 import { useProjects, useThreadShells } from "../../state/entities";
 import type { WorkspaceState } from "../../state/workspaceModel";
 import { hasConfirmedEnvironmentFailure } from "../../state/environmentAvailability";
+import { environmentServerConfigsAtom } from "../../state/server";
 import { useWorkspaceState } from "../../state/workspace";
 import { groupProjectsByRepository } from "../../lib/repositoryGroups";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
@@ -99,6 +102,10 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
   const repositoryGroups = useMemo(
     () => groupProjectsByRepository({ projects, threads }),
     [projects, threads],
+  );
+  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  const canAddProject = [...serverConfigs.values()].some(
+    (config) => resolveMobileClientCapabilities(config.environment.capabilities).workspace,
   );
   const items = useMemo(() => {
     const nextItems: Array<{
@@ -201,7 +208,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
             subtitle={incomingShareSubtitle}
             onBack={layout.usesSplitView ? () => navigation.goBack() : undefined}
             actions={
-              catalogState.hasReadyEnvironment
+              catalogState.hasReadyEnvironment && canAddProject
                 ? [
                     {
                       accessibilityLabel: "Add project",
@@ -230,7 +237,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                 separateBackground
               />
             ) : null}
-            {catalogState.hasReadyEnvironment ? (
+            {catalogState.hasReadyEnvironment && canAddProject ? (
               <NativeHeaderToolbar.Button
                 icon="plus"
                 onPress={() => navigation.navigate("NewTaskSheet", { screen: "AddProject" })}
@@ -259,7 +266,9 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
               {projectEmptyState.title}
             </Text>
             <Text className="text-center text-sm leading-normal text-foreground-muted">
-              {projectEmptyState.detail}
+              {canAddProject
+                ? projectEmptyState.detail
+                : "This mobile client can chat in existing projects. Add projects from desktop."}
             </Text>
             {!catalogState.hasReadyEnvironment ? (
               <Pressable
@@ -270,7 +279,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                   Add environment
                 </Text>
               </Pressable>
-            ) : (
+            ) : canAddProject ? (
               <Pressable
                 className="mt-1 rounded-full bg-primary px-4 py-2.5 active:opacity-70"
                 onPress={() => navigation.navigate("NewTaskSheet", { screen: "AddProject" })}
@@ -279,7 +288,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                   Add new project
                 </Text>
               </Pressable>
-            )}
+            ) : null}
           </View>
         ) : (
           <View collapsable={false} className="overflow-hidden rounded-[24px] bg-card">

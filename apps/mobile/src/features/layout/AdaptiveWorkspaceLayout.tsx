@@ -363,19 +363,6 @@ function AdaptiveWorkspaceLayoutContent(
     setFocusedAuxiliaryPaneRole("supplementary");
     setSupplementaryPanePreferredVisible(true);
   }, []);
-  const handleOpenFilesCommand = useCallback(() => {
-    const activeThread = parseActiveThreadPath(pathname);
-    if (!layout.usesSplitView || !fileInspector.supported || activeThread === null) {
-      return false;
-    }
-    showAuxiliaryPane("inspector");
-    if (/\/files(?:\/|$)/.test(pathname)) {
-      return true;
-    }
-    navigation.navigate("ThreadFiles", activeThread);
-    return true;
-  }, [fileInspector.supported, layout.usesSplitView, pathname, navigation, showAuxiliaryPane]);
-  useHardwareKeyboardCommand("files", handleOpenFilesCommand);
   const toggleAuxiliaryPane = useCallback(() => {
     if (auxiliaryPaneRole === "inspector") {
       setFileInspectorPreferredVisible((current) => !current);

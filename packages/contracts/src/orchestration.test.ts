@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import {
+  ClientOrchestrationCommand,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
   ModelSelection,
@@ -53,6 +54,7 @@ const decodeThreadCreatedPayload = Schema.decodeUnknownEffect(ThreadCreatedPaylo
 const decodeOrchestrationCommand = Schema.decodeUnknownEffect(OrchestrationCommand);
 const decodeOrchestrationEvent = Schema.decodeUnknownEffect(OrchestrationEvent);
 const decodeThreadMetaUpdatedPayload = Schema.decodeUnknownEffect(ThreadMetaUpdatedPayload);
+const decodeClientOrchestrationCommand = Schema.decodeUnknownEffect(ClientOrchestrationCommand);
 
 it.effect("parses turn diff input when fromTurnCount <= toTurnCount", () =>
   Effect.gen(function* () {
@@ -911,5 +913,39 @@ it.effect("ModelSelection rejects malformed instance ids", () =>
       }),
     );
     assert.strictEqual(result._tag, "Failure");
+  }),
+);
+
+it.effect("accepts a client fork command with its copied transcript", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeClientOrchestrationCommand({
+      type: "thread.fork.create",
+      commandId: "fork-command",
+      threadId: "fork-thread",
+      sourceThreadId: "source-thread",
+      projectId: "project-1",
+      title: "Forked conversation",
+      modelSelection: { instanceId: "codex", model: "gpt-5.6" },
+      runtimeMode: "approval-required",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      forkPointMessageId: null,
+      importedMessages: [
+        {
+          messageId: "fork-message-1",
+          role: "user",
+          text: "Keep this context",
+          createdAt: "2026-08-25T10:00:00.000Z",
+          updatedAt: "2026-08-25T10:00:00.000Z",
+        },
+      ],
+      createdAt: "2026-08-25T10:01:00.000Z",
+    });
+
+    if (parsed.type !== "thread.fork.create") {
+      throw new Error(`Expected thread.fork.create, received ${parsed.type}`);
+    }
+    assert.strictEqual(parsed.importedMessages[0]?.text, "Keep this context");
   }),
 );

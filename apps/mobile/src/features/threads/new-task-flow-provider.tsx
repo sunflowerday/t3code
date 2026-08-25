@@ -28,6 +28,7 @@ import {
   resolveSelectableModelSelection,
 } from "../../lib/modelOptions";
 import { groupProjectsByRepository } from "../../lib/repositoryGroups";
+import { resolveMobileClientCapabilities } from "../../lib/mobileCapabilities";
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import { appAtomRegistry } from "../../state/atom-registry";
 import {
@@ -341,6 +342,9 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   const selectedEnvironmentServerConfig = useEnvironmentServerConfig(
     selectedProject?.environmentId ?? null,
   );
+  const workspaceSupported = resolveMobileClientCapabilities(
+    selectedEnvironmentServerConfig?.environment.capabilities,
+  ).workspace;
   // While a queued pending task is being edited its draft lives under a key
   // scoped to the queued message, so per-project new-task drafts stay intact.
   const selectedProjectDraftKey = editingPendingTask
@@ -351,21 +355,31 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   const selectedProjectDraft = useComposerDraft(selectedProjectDraftKey);
   const prompt = selectedProjectDraft.text;
   const attachments = selectedProjectDraft.attachments;
-  // The server's configured default decides the mode until the user picks one
-  // explicitly — same resolution web uses for new draft threads.
-  const defaultWorkspaceMode: WorkspaceMode =
-    selectedEnvironmentServerConfig?.settings.defaultThreadEnvMode ?? "local";
-  const workspaceMode = selectedProjectDraft.workspaceSelection?.mode ?? defaultWorkspaceMode;
-  const selectedBranchName = selectedProjectDraft.workspaceSelection?.branch ?? null;
-  const selectedWorktreePath = selectedProjectDraft.workspaceSelection?.worktreePath ?? null;
+  // A chat-only mobile connection starts in the existing project checkout and
+  // never asks the server for branches or worktrees.
+  const defaultWorkspaceMode: WorkspaceMode = workspaceSupported
+    ? (selectedEnvironmentServerConfig?.settings.defaultThreadEnvMode ?? "local")
+    : "local";
+  const workspaceMode = workspaceSupported
+    ? (selectedProjectDraft.workspaceSelection?.mode ?? defaultWorkspaceMode)
+    : "local";
+  const selectedBranchName = workspaceSupported
+    ? (selectedProjectDraft.workspaceSelection?.branch ?? null)
+    : null;
+  const selectedWorktreePath = workspaceSupported
+    ? (selectedProjectDraft.workspaceSelection?.worktreePath ?? null)
+    : null;
   // Keep the user's explicit choice separate from the resolved display value:
   // only the explicit flag is ever written back to the draft, so the resolved
   // value keeps tracking the server setting when the config loads late.
-  const draftStartFromOrigin = selectedProjectDraft.workspaceSelection?.startFromOrigin;
+  const draftStartFromOrigin = workspaceSupported
+    ? selectedProjectDraft.workspaceSelection?.startFromOrigin
+    : undefined;
   const startFromOrigin =
     draftStartFromOrigin ??
-    selectedEnvironmentServerConfig?.settings.newWorktreesStartFromOrigin ??
-    true;
+    (workspaceSupported
+      ? (selectedEnvironmentServerConfig?.settings.newWorktreesStartFromOrigin ?? true)
+      : true);
   const runtimeMode = selectedProjectDraft.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   const interactionMode = selectedProjectDraft.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE;
 
@@ -491,16 +505,16 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   }, [selectedProjectDraftKey]);
   const branchTarget = useMemo(
     () => ({
-      environmentId: selectedProject?.environmentId ?? null,
+      environmentId: workspaceSupported ? (selectedProject?.environmentId ?? null) : null,
       // `|| null` also skips the stand-in project's empty workspaceRoot.
-      cwd: selectedProject?.workspaceRoot || null,
+      cwd: workspaceSupported ? (selectedProject?.workspaceRoot || null) : null,
       query: null,
     }),
-    [selectedProject?.environmentId, selectedProject?.workspaceRoot],
+    [selectedProject?.environmentId, selectedProject?.workspaceRoot, workspaceSupported],
   );
   const branchState = useBranches(branchTarget);
-  const branchesLoading = branchState.isPending;
-  const allBranchRefs = branchState.data?.refs ?? EMPTY_BRANCH_REFS;
+  const branchesLoading = workspaceSupported && branchState.isPending;
+  const allBranchRefs = workspaceSupported ? (branchState.data?.refs ?? EMPTY_BRANCH_REFS) : EMPTY_BRANCH_REFS;
   const availableBranches = useMemo(
     () =>
       pipe(
