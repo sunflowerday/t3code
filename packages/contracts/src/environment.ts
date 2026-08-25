@@ -50,6 +50,23 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server understands regenerateTitle on thread.meta.update. Absent on
       older servers, so clients hide the action instead of sending it. */
   threadTitleRegeneration: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Features a server deliberately exposes to the mobile client. Missing
+   * fields fail closed so a client never offers a control an older or
+   * restricted server cannot honor.
+   */
+  mobileClient: Schema.optionalKey(
+    Schema.Struct({
+      /** Workspace management, including files, terminal, VCS, and review. */
+      workspace: Schema.optionalKey(Schema.Boolean),
+      /** Settle and snooze actions that manage a thread rather than chat in it. */
+      threadLifecycle: Schema.optionalKey(Schema.Boolean),
+      /** Ends the provider session, rather than merely interrupting one turn. */
+      threadSessionStop: Schema.optionalKey(Schema.Boolean),
+      /** Creates a conversation branch from a thread's transcript. */
+      threadFork: Schema.optionalKey(Schema.Boolean),
+    }),
+  ),
   /** The update path clients should offer for this server. Absent on
       servers that must be relaunched manually (dev checkouts, Windows
       foreground runs, pre-update servers). */

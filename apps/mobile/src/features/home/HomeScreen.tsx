@@ -29,6 +29,7 @@ import { EmptyState } from "../../components/EmptyState";
 import type { WorkspaceEnvironment, WorkspaceState } from "../../state/workspaceModel";
 import { hasConfirmedEnvironmentFailure } from "../../state/environmentAvailability";
 import type { SavedRemoteConnection } from "../../lib/connection";
+import { resolveMobileClientCapabilities } from "../../lib/mobileCapabilities";
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
@@ -556,7 +557,10 @@ export function HomeScreen(props: HomeScreenProps) {
   const settlementEnvironmentIds = useMemo(() => {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
-      if (config.environment.capabilities.threadSettlement === true) {
+      if (
+        config.environment.capabilities.threadSettlement === true &&
+        resolveMobileClientCapabilities(config.environment.capabilities).threadLifecycle
+      ) {
         supported.add(environmentId);
       }
     }
@@ -565,7 +569,10 @@ export function HomeScreen(props: HomeScreenProps) {
   const snoozeEnvironmentIds = useMemo(() => {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
-      if (config.environment.capabilities.threadSnooze === true) {
+      if (
+        config.environment.capabilities.threadSnooze === true &&
+        resolveMobileClientCapabilities(config.environment.capabilities).threadLifecycle
+      ) {
         supported.add(environmentId);
       }
     }

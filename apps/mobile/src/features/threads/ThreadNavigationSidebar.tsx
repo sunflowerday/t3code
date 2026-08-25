@@ -26,6 +26,7 @@ import { SymbolView } from "../../components/AppSymbol";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
+import { resolveMobileClientCapabilities } from "../../lib/mobileCapabilities";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { useProjects, useThreadShells } from "../../state/entities";
 import { useThreadSearch } from "../../state/queries";
@@ -466,7 +467,10 @@ function ThreadNavigationSidebarPane(
   const settlementEnvironmentIds = useMemo(() => {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
-      if (config.environment.capabilities.threadSettlement === true) {
+      if (
+        config.environment.capabilities.threadSettlement === true &&
+        resolveMobileClientCapabilities(config.environment.capabilities).threadLifecycle
+      ) {
         supported.add(environmentId);
       }
     }
@@ -475,7 +479,10 @@ function ThreadNavigationSidebarPane(
   const snoozeEnvironmentIds = useMemo(() => {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
-      if (config.environment.capabilities.threadSnooze === true) {
+      if (
+        config.environment.capabilities.threadSnooze === true &&
+        resolveMobileClientCapabilities(config.environment.capabilities).threadLifecycle
+      ) {
         supported.add(environmentId);
       }
     }

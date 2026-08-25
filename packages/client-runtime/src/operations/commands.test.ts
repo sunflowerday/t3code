@@ -25,6 +25,7 @@ import {
   archiveThread,
   createProject,
   settleThread,
+  forkThread,
   stopThreadSession,
   unsettleThread,
 } from "./commands.ts";
@@ -115,6 +116,64 @@ describe("environment commands", () => {
           type: "thread.session.stop",
           commandId: "queued-command",
           threadId: "thread-1",
+          createdAt: "2026-06-06T00:01:00.000Z",
+        },
+      ]);
+    }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
+  );
+
+  it.effect("dispatches a fork with a copied transcript", () =>
+    Effect.gen(function* () {
+      const dispatched: ClientOrchestrationCommand[] = [];
+      const supervisor = yield* makeSupervisor(dispatched);
+
+      yield* forkThread({
+        commandId: CommandId.make("fork-command"),
+        threadId: ThreadId.make("fork-thread"),
+        sourceThreadId: ThreadId.make("source-thread"),
+        projectId: ProjectId.make("project-1"),
+        title: "Forked conversation",
+        modelSelection: { instanceId: "codex", model: "gpt-5.6" },
+        runtimeMode: "approval-required",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        forkPointMessageId: null,
+        importedMessages: [
+          {
+            messageId: "fork-message-1",
+            role: "user",
+            text: "Keep this context",
+            createdAt: "2026-06-06T00:00:00.000Z",
+            updatedAt: "2026-06-06T00:00:00.000Z",
+          },
+        ],
+        createdAt: "2026-06-06T00:01:00.000Z",
+      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+
+      expect(dispatched).toEqual([
+        {
+          type: "thread.fork.create",
+          commandId: "fork-command",
+          threadId: "fork-thread",
+          sourceThreadId: "source-thread",
+          projectId: "project-1",
+          title: "Forked conversation",
+          modelSelection: { instanceId: "codex", model: "gpt-5.6" },
+          runtimeMode: "approval-required",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          forkPointMessageId: null,
+          importedMessages: [
+            {
+              messageId: "fork-message-1",
+              role: "user",
+              text: "Keep this context",
+              createdAt: "2026-06-06T00:00:00.000Z",
+              updatedAt: "2026-06-06T00:00:00.000Z",
+            },
+          ],
           createdAt: "2026-06-06T00:01:00.000Z",
         },
       ]);

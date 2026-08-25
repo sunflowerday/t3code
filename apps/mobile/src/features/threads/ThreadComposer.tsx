@@ -54,6 +54,7 @@ import {
 import { ControlPill, ControlPillMenu } from "../../components/ControlPill";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
+import { resolveMobileClientCapabilities } from "../../lib/mobileCapabilities";
 import {
   buildModelMenuActions,
   buildModelOptions,
@@ -116,6 +117,7 @@ export interface ThreadComposerProps {
   readonly onNativePasteImages: (uris: ReadonlyArray<string>) => Promise<void>;
   readonly onRemoveDraftImage: (imageId: string) => void;
   readonly onStopThread: () => void;
+  readonly canStopThread: boolean;
   readonly onSendMessage: () => Promise<MessageId | null>;
   readonly onUpdateModelSelection: (modelSelection: ModelSelection) => void;
   readonly onUpdateRuntimeMode: (runtimeMode: RuntimeMode) => void;
@@ -319,8 +321,9 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     onExpandedChange?.(false);
   }, [onExpandedChange]);
   const showStopAction =
-    props.selectedThread.session?.status === "running" ||
-    props.selectedThread.session?.status === "starting";
+    props.canStopThread &&
+    (props.selectedThread.session?.status === "running" ||
+      props.selectedThread.session?.status === "starting");
 
   const sendLabel =
     props.connectionState !== "connected" || props.activeThreadBusy || props.queueCount > 0
@@ -373,10 +376,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     }
     return detectComposerTrigger(props.draftMessage, composerSelection.end);
   }, [composerSelection, props.draftMessage]);
+  const workspaceSupported = resolveMobileClientCapabilities(
+    props.serverConfig?.environment.capabilities,
+  ).workspace;
   const pathSearch = useComposerPathSearch({
     environmentId: props.environmentId,
-    cwd: composerTrigger?.kind === "path" ? props.projectCwd : null,
-    query: composerTrigger?.kind === "path" ? composerTrigger.query : null,
+    cwd: workspaceSupported && composerTrigger?.kind === "path" ? props.projectCwd : null,
+    query: workspaceSupported && composerTrigger?.kind === "path" ? composerTrigger.query : null,
   });
 
   const composerMenuItems: ComposerCommandItem[] = useMemo(() => {
@@ -507,7 +513,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       }));
     }
 
-    if (composerTrigger.kind === "path") {
+    if (workspaceSupported && composerTrigger.kind === "path") {
       return pathSearch.entries.map((entry) => {
         const parts = entry.path.split("/");
         return {
@@ -522,7 +528,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     }
 
     return [];
-  }, [composerTrigger, pathSearch.entries, selectedProviderStatus]);
+  }, [composerTrigger, pathSearch.entries, selectedProviderStatus, workspaceSupported]);
 
   // ── Handle command selection ──────────────────────────────
   const { onChangeDraftMessage, onUpdateInteractionMode, draftMessage, onSendMessage } = props;
