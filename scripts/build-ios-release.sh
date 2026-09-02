@@ -92,6 +92,10 @@ xcodebuild_args=(
   -derivedDataPath "${DERIVED_DATA}"
   "DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM}"
   "CODE_SIGN_STYLE=${CODE_SIGN_STYLE}"
+  # 2026-09-02: Xcode's compilation cache grew past 25 GB inside one build
+  # (CompilationCache.noindex v8.data/v8.index) and starved the host disk.
+  # ccache already covers the C/ObjC/Swift hot path; the Xcode cache is off.
+  "COMPILATION_CACHE_ENABLE_CACHING=NO"
   build
 )
 
