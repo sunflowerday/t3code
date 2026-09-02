@@ -11,6 +11,7 @@ import {
   RuntimeMode,
   ThreadId,
   type ModelSelection as ModelSelectionType,
+  type OrchestrationSessionStatus,
   type ProjectId as ProjectIdType,
   type ProviderInteractionMode as ProviderInteractionModeType,
   type RuntimeMode as RuntimeModeType,
@@ -170,6 +171,68 @@ export function resolveThreadOutboxDeliveryAction(input: {
     return input.shellStatus === "live" ? "remove" : "wait";
   }
   return input.environmentConnected && !input.threadBusy ? "send" : "wait";
+}
+
+/**
+ * A `wait` is the one delivery decision with no follow-up of its own, and the
+ * states it waits on are read from a subscription that can park without
+ * surfacing an error (a shell stream whose resubscribe lost its transport
+ * stays `synchronizing` over a stale snapshot until the app is relaunched).
+ * Re-checking at this interval keeps a queued message from lying in the outbox
+ * forever when the transition it waited for never reaches this client.
+ */
+export const THREAD_OUTBOX_WAIT_RETRY_DELAY_MS = 15_000;
+
+export type ThreadOutboxSessionStatus = OrchestrationSessionStatus;
+
+export interface ThreadOutboxDrainEvaluation {
+  readonly deliveryAction: ThreadOutboxDeliveryAction;
+  /** Set only for `wait`: re-run the drain for this message after this delay. */
+  readonly waitRetryDelayMs: number | null;
+  readonly report: {
+    readonly deliveryAction: ThreadOutboxDeliveryAction;
+    readonly isCreation: boolean;
+    readonly threadExists: boolean;
+    readonly shellStatus: EnvironmentShellStatus;
+    readonly connectionState: string | null;
+    readonly threadSessionStatus: ThreadOutboxSessionStatus | null;
+  };
+}
+
+export function isThreadOutboxSessionBusy(
+  status: ThreadOutboxSessionStatus | null | undefined,
+): boolean {
+  return status === "running" || status === "starting";
+}
+
+export function resolveThreadOutboxDrainEvaluation(input: {
+  readonly isCreation: boolean;
+  readonly threadExists: boolean;
+  readonly shellStatus: EnvironmentShellStatus;
+  readonly environmentConnected: boolean;
+  readonly threadSessionStatus: ThreadOutboxSessionStatus | null;
+  readonly connectionState: string | null;
+}): ThreadOutboxDrainEvaluation {
+  const threadBusy = isThreadOutboxSessionBusy(input.threadSessionStatus);
+  const deliveryAction = resolveThreadOutboxDeliveryAction({
+    isCreation: input.isCreation,
+    threadExists: input.threadExists,
+    shellStatus: input.shellStatus,
+    environmentConnected: input.environmentConnected,
+    threadBusy,
+  });
+  return {
+    deliveryAction,
+    waitRetryDelayMs: deliveryAction === "wait" ? THREAD_OUTBOX_WAIT_RETRY_DELAY_MS : null,
+    report: {
+      deliveryAction,
+      isCreation: input.isCreation,
+      threadExists: input.threadExists,
+      shellStatus: input.shellStatus,
+      connectionState: input.connectionState,
+      threadSessionStatus: input.threadSessionStatus,
+    },
+  };
 }
 
 /**

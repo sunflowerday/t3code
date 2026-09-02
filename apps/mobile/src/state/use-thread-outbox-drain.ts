@@ -29,11 +29,13 @@ import {
 import { automationNote } from "../features/automation/automationLink";
 import {
   isQueuedThreadCreationSendable,
+  isThreadOutboxSessionBusy,
   modelSelectionsEqual,
-  resolveThreadOutboxDeliveryAction,
+  resolveThreadOutboxDrainEvaluation,
   resolveThreadOutboxFailureAction,
   resolveQueuedThreadSettings,
   threadOutboxRetryDelayMs,
+  THREAD_OUTBOX_WAIT_RETRY_DELAY_MS,
   type QueuedThreadCreation,
   type QueuedThreadMessage,
   type ThreadOutboxCommandStage,
@@ -173,6 +175,22 @@ export function useThreadOutboxDrain(): void {
       }
     };
     return { reportFailure, completeDelivery };
+  }, []);
+
+  // A `wait` is the one delivery decision that produces no follow-up: a failed
+  // send gets a backoff timer, a wait got nothing, so any state transition the
+  // atom store never learns about left the message queued until relaunch. Arm a
+  // single re-evaluation pass instead, and let the drain deps short-circuit it
+  // whenever shell, thread or connection state does move.
+  const armWaitReEvaluation = useCallback((queuedMessageId: MessageId, delayMs: number | null) => {
+    if (delayMs === null || retryTimersRef.current.has(queuedMessageId)) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      retryTimersRef.current.delete(queuedMessageId);
+      setRetryTick((current) => current + 1);
+    }, delayMs);
+    retryTimersRef.current.set(queuedMessageId, timer);
   }, []);
 
   const sendQueuedMessage = useCallback(
@@ -319,24 +337,26 @@ export function useThreadOutboxDrain(): void {
         (candidate) => candidate.environmentId === nextQueuedMessage.environmentId,
       );
       const shellStatus = shellStatuses.get(nextQueuedMessage.environmentId) ?? "empty";
-      const deliveryAction = resolveThreadOutboxDeliveryAction({
+      const evaluation = resolveThreadOutboxDrainEvaluation({
         isCreation: creation !== undefined,
         threadExists: thread !== undefined,
         shellStatus,
         environmentConnected: environment?.connectionState === "connected",
-        threadBusy: thread?.session?.status === "running" || thread?.session?.status === "starting",
+        threadSessionStatus: thread?.session?.status ?? null,
+        connectionState: environment?.connectionState ?? null,
       });
+      const { deliveryAction } = evaluation;
       automationNote("outbox-delivery", {
         threadId: nextQueuedMessage.threadId,
         messageId: nextQueuedMessage.messageId,
-        deliveryAction,
-        isCreation: creation !== undefined,
-        threadExists: thread !== undefined,
-        shellStatus,
-        connectionState: environment?.connectionState ?? null,
-        threadSessionStatus: thread?.session?.status ?? null,
+        ...evaluation.report,
       });
       if (deliveryAction === "wait") {
+        // Nothing here schedules itself by changing a dep: re-evaluate on the
+        // next shell/thread/connection change *and* on the armed fallback tick,
+        // so a state transition this client never learns about cannot strand
+        // the message until the app is relaunched.
+        armWaitReEvaluation(nextQueuedMessage.messageId, evaluation.waitRetryDelayMs);
         continue;
       }
       // The live project shell is preferred for the workspace path, with the
@@ -393,9 +413,14 @@ export function useThreadOutboxDrain(): void {
           appAtomRegistry.get(environmentThreadShells.threadShellsAtom),
           nextQueuedMessage,
         );
-        const freshThreadBusy =
-          freshThread?.session?.status === "running" || freshThread?.session?.status === "starting";
-        if (deliveryAction === "send" && creation === undefined && freshThreadBusy) {
+        if (
+          deliveryAction === "send" &&
+          creation === undefined &&
+          isThreadOutboxSessionBusy(freshThread?.session?.status)
+        ) {
+          // Deferred, not delivered: the turn that blocked us may already be
+          // over by the time the store notices, so keep a wake-up armed.
+          armWaitReEvaluation(nextQueuedMessage.messageId, THREAD_OUTBOX_WAIT_RETRY_DELAY_MS);
           return true;
         }
         return deliveryAction === "remove"
@@ -441,6 +466,7 @@ export function useThreadOutboxDrain(): void {
       return;
     }
   }, [
+    armWaitReEvaluation,
     connectedEnvironments,
     dispatchingQueuedMessageId,
     editingQueuedMessageIds,
@@ -449,6 +475,9 @@ export function useThreadOutboxDrain(): void {
     retryTick,
     sendQueuedCreation,
     sendQueuedMessage,
+    // threads + shellStatuses are how a `wait` gets re-evaluated the moment the
+    // thread session or the environment shell moves; retryTick is the armed
+    // fallback for transitions that never reach this client at all.
     shellStatuses,
     threads,
   ]);
