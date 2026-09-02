@@ -8,6 +8,7 @@ import type { EnvironmentId } from "@t3tools/contracts";
 import { AppText as Text } from "../../components/AppText";
 import { useEnvironments } from "../../state/environments";
 import { usePreparedConnection } from "../../state/session";
+import { automationNote } from "../automation/automationLink";
 
 const ORIGIN = "https://phone.kuca.app";
 const ERR = "无法打开 phone.kuca.app，请检查网络后重试。";
@@ -121,6 +122,7 @@ export function PhoneWebRouteScreen({
       authenticated = null;
     }
     const action = decidePhoneWebAction(authenticated, auth);
+    automationNote("web-probe", { uri, authenticated, action, hasAuth: auth?._tag ?? null });
     if (action === "stay") {
       if (minted.current) setUri(targetUri);
       return;
@@ -130,7 +132,10 @@ export function PhoneWebRouteScreen({
       minted.current = true;
       void mintPairingUri(auth.token)
         .then(setUri)
-        .catch(() => setError(ERR));
+        .catch((cause: unknown) => {
+          automationNote("web-mint-failed", { uri, cause: String(cause) });
+          setError(ERR);
+        });
       return;
     }
     if (isReady) setError(ERR);
@@ -157,7 +162,13 @@ export function PhoneWebRouteScreen({
           setSupportMultipleWindows={false}
           injectedJavaScript={SESSION_PROBE}
           onMessage={onMessage}
-          onError={() => setError(ERR)}
+          onError={(event) => {
+            automationNote("web-error", { uri, nativeEvent: event.nativeEvent });
+            setError(ERR);
+          }}
+          onLoadEnd={(event) =>
+            automationNote("web-load-end", { uri, nativeEvent: event.nativeEvent })
+          }
           onShouldStartLoadWithRequest={(request) => {
             if (shouldLoadInPhoneWebView(request.url)) return true;
             void Linking.openURL(request.url);
