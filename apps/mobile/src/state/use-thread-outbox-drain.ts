@@ -26,6 +26,7 @@ import {
   ensureThreadOutboxLoaded,
   removeThreadOutboxMessage,
 } from "./thread-outbox";
+import { automationNote } from "../features/automation/automationLink";
 import {
   isQueuedThreadCreationSendable,
   modelSelectionsEqual,
@@ -132,6 +133,15 @@ export function useThreadOutboxDrain(): void {
         interrupted: Cause.hasInterruptsOnly(commandResult.cause),
       });
       const retry = action === "retry";
+      automationNote("outbox-failure", {
+        environmentId: queuedMessage.environmentId,
+        threadId: queuedMessage.threadId,
+        messageId: queuedMessage.messageId,
+        stage,
+        action,
+        cause: String(Cause.squash(commandResult.cause)),
+        pretty: Cause.pretty(commandResult.cause).slice(0, 2000),
+      });
       console.warn("[thread-outbox] queued message delivery failed", {
         environmentId: queuedMessage.environmentId,
         threadId: queuedMessage.threadId,
@@ -315,6 +325,16 @@ export function useThreadOutboxDrain(): void {
         shellStatus,
         environmentConnected: environment?.connectionState === "connected",
         threadBusy: thread?.session?.status === "running" || thread?.session?.status === "starting",
+      });
+      automationNote("outbox-delivery", {
+        threadId: nextQueuedMessage.threadId,
+        messageId: nextQueuedMessage.messageId,
+        deliveryAction,
+        isCreation: creation !== undefined,
+        threadExists: thread !== undefined,
+        shellStatus,
+        connectionState: environment?.connectionState ?? null,
+        threadSessionStatus: thread?.session?.status ?? null,
       });
       if (deliveryAction === "wait") {
         continue;
