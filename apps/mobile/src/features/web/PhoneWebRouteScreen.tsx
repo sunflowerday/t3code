@@ -60,8 +60,13 @@ export function decidePhoneWebAction(
   return authenticated === false && authorization?._tag === "Bearer" ? "mint" : "error";
 }
 
-export function phonePairUrl(credential: string): string {
-  return `${ORIGIN}/pair#token=${encodeURIComponent(credential)}`;
+/**
+ * `/pair` (synara L5) honours a hash `returnTo`: same-origin path only, so the
+ * WebView lands back on the deck / cards / config page instead of Kuca home.
+ */
+export function phonePairUrl(credential: string, returnTo: string = "/"): string {
+  const suffix = returnTo === "/" ? "" : `&returnTo=${encodeURIComponent(returnTo)}`;
+  return `${ORIGIN}/pair#token=${encodeURIComponent(credential)}${suffix}`;
 }
 
 export function lastAssistantHasReadyCard(items: ReadonlyArray<unknown>): boolean {
@@ -75,7 +80,7 @@ export function lastAssistantHasReadyCard(items: ReadonlyArray<unknown>): boolea
   return false;
 }
 
-async function mintPairingUri(token: string): Promise<string> {
+async function mintPairingUri(token: string, returnTo: string): Promise<string> {
   const response = await fetch(`${ORIGIN}/api/auth/pairing-token`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -84,7 +89,7 @@ async function mintPairingUri(token: string): Promise<string> {
   const body = (await response.json()) as { credential?: unknown };
   if (!response.ok || typeof body.credential !== "string" || !body.credential)
     throw new Error("mint");
-  return phonePairUrl(body.credential);
+  return phonePairUrl(body.credential, returnTo);
 }
 
 export function PhoneWebRouteScreen({
@@ -130,7 +135,7 @@ export function PhoneWebRouteScreen({
     if (minted.current) return;
     if (action === "mint" && auth?._tag === "Bearer") {
       minted.current = true;
-      void mintPairingUri(auth.token)
+      void mintPairingUri(auth.token, path)
         .then(setUri)
         .catch((cause: unknown) => {
           automationNote("web-mint-failed", { uri, cause: String(cause) });
