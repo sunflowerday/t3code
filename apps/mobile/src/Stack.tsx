@@ -16,7 +16,7 @@ import { DynamicColorIOS, Platform, Pressable, ScrollView, StyleSheet } from "re
 import { useResolveClassNames } from "uniwind";
 
 import { AppText as Text } from "./components/AppText";
-import { getCompactBrandHeaderOptions } from "./components/CompactBrandTitle";
+
 import { ArchivedThreadsRouteScreen } from "./features/archive/ArchivedThreadsRouteScreen";
 import { useAgentNotificationNavigation } from "./features/agent-awareness/notificationNavigation";
 import { ClerkSettingsSheetDetentProvider } from "./features/cloud/ClerkSettingsSheetDetent";
@@ -35,7 +35,7 @@ import { GitOverviewSheet } from "./features/threads/git/GitOverviewSheet";
 import { ThreadRouteScreen } from "./features/threads/ThreadRouteScreen";
 import { ConnectionsRouteScreen } from "./features/connection/ConnectionsRouteScreen";
 import { ConnectionsNewRouteScreen } from "./features/connection/ConnectionsNewRouteScreen";
-import { HomeRouteScreen } from "./features/home/HomeRouteScreen";
+import { PhoneWebRouteScreen } from "./features/web/PhoneWebRouteScreen";
 import { AddProjectDestinationRoute } from "./features/projects/AddProjectDestinationRoute";
 import { AddProjectLocalRoute } from "./features/projects/AddProjectLocalRoute";
 import { AddProjectRepositoryRoute } from "./features/projects/AddProjectRepositoryRoute";
@@ -432,13 +432,10 @@ export const RootStack = createNativeStackNavigator({
   },
   screens: {
     Home: createNativeStackScreen({
-      screen: HomeRouteScreen,
+      screen: PhoneWebRouteScreen,
       linking: "",
       options: {
-        ...GLASS_HEADER_OPTIONS,
-        contentStyle: { backgroundColor: "transparent" },
-        headerBackVisible: false,
-        ...getCompactBrandHeaderOptions(),
+        headerShown: false,
       },
     }),
     Thread: createNativeStackScreen({
