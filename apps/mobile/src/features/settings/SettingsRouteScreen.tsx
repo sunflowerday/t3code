@@ -45,6 +45,7 @@ import {
   runAppUpdateCheck,
 } from "../updates/app-updates";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
+import { govDeckWebParams } from "../web/PhoneWebRouteScreen";
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
@@ -540,6 +541,7 @@ function ConfiguredSettingsRouteScreen() {
 }
 
 function GeneralSettingsSection() {
+  const navigation = useNavigation();
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const projectGroupingEnabled = AsyncResult.isSuccess(preferencesResult)
@@ -548,6 +550,11 @@ function GeneralSettingsSection() {
 
   return (
     <SettingsSection title="General">
+      <SettingsRow
+        icon="square.split.2x1"
+        label="治理牌"
+        onPress={() => navigation.navigate("Web", govDeckWebParams())}
+      />
       <SettingsSwitchRow
         icon="folder"
         label="Project Grouping"

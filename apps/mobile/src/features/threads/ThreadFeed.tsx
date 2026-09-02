@@ -66,6 +66,7 @@ import {
 // kuca: view-card split + WebView-hosted card renderer.
 import { splitViewMessageSegments } from "./viewCardSegments";
 import { ViewCardBlock } from "./ViewCardBlock";
+import { ViewPhoneCardButton } from "../web/PhoneWebRouteScreen";
 
 import { AppText as Text } from "../../components/AppText";
 import { CopyTextButton } from "../../components/CopyTextButton";
@@ -1918,6 +1919,9 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             scrollEventThrottle={16}
             ListHeaderComponent={
               usesNativeAutomaticInsets ? null : <View style={{ height: topContentInset }} />
+            }
+            ListFooterComponent={
+              <ViewPhoneCardButton environmentId={props.environmentId} threadId={props.threadId} />
             }
             contentContainerStyle={{
               paddingTop: 12,
