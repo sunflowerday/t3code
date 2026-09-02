@@ -198,9 +198,29 @@ export function installAutomationLink(): () => void {
     if (!url || !isAutomationUrl(url)) return;
     const request = parseAutomationUrl(url);
     if (request) void performAutomation(request);
+    else
+      void writeReport(
+        { action: "report", runId: `bad-${Date.now()}`, params: { url } },
+        { ok: false, error: "unparseable automation url" },
+      );
   };
   const subscription = Linking.addEventListener("url", (event) => handle(event.url));
-  void Linking.getInitialURL().then(handle);
+  void Linking.getInitialURL().then(
+    (initial) => {
+      // Boot record: proves the hook installed and shows what the cold start saw.
+      void writeReport(
+        { action: "report", runId: `boot-${Date.now()}`, params: { initialUrl: initial ?? "" } },
+        { ok: true },
+      ).catch(() => {});
+      handle(initial);
+    },
+    (error: unknown) => {
+      void writeReport(
+        { action: "report", runId: `boot-${Date.now()}`, params: {} },
+        { ok: false, error: String(error) },
+      ).catch(() => {});
+    },
+  );
   return () => {
     subscription.remove();
     installed = false;
