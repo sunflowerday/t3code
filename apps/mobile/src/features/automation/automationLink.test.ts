@@ -22,6 +22,20 @@ describe("automation deep link", () => {
     expect(isAutomationUrl("t3code://automation/report")).toBe(true);
   });
 
+  it("parses new-thread with optional projectId and model", () => {
+    const request = parseAutomationUrl(
+      "t3code://automation/new-thread?environmentId=e1&projectId=p1&model=gpt-5.6-sol&text=hello&runId=n1",
+    );
+    expect(request?.action).toBe("new-thread");
+    expect(request?.params).toEqual({
+      environmentId: "e1",
+      projectId: "p1",
+      model: "gpt-5.6-sol",
+      text: "hello",
+      runId: "n1",
+    });
+  });
+
   it("defaults runId when absent", () => {
     const request = parseAutomationUrl("t3code://automation/report");
     expect(request?.action).toBe("report");

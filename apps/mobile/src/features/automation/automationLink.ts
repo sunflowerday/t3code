@@ -15,8 +15,14 @@
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import { createNavigationContainerRef } from "@react-navigation/native";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { CommandId, MessageId } from "@t3tools/contracts";
+import type { EnvironmentId, ModelSelection, ThreadId } from "@t3tools/contracts";
+import {
+  CommandId,
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  DEFAULT_RUNTIME_MODE,
+  MessageId,
+} from "@t3tools/contracts";
+import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 
 import {
@@ -26,10 +32,15 @@ import {
   parseAutomationUrl,
 } from "./automationUrl";
 
-import { makeQueuedMessageMetadata } from "../../lib/commandMetadata";
+import { makeQueuedMessageMetadata, makeTurnCommandMetadata } from "../../lib/commandMetadata";
+import { buildModelOptions, resolveSelectableModelSelection } from "../../lib/modelOptions";
+import { buildProjectThreadStartTurnInput } from "../../lib/projectThreadStartTurn";
+import { randomHex } from "../../lib/uuid";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { environmentCatalog } from "../../connection/catalog";
 import { environmentPresentations } from "../../state/presentation";
+import { environmentProjects } from "../../state/projects";
+import { serverEnvironment } from "../../state/server";
 import { enqueueThreadOutboxMessage } from "../../state/thread-outbox";
 import { environmentThreadShells, threadEnvironment } from "../../state/threads";
 import { pendingConnectionErrorAtom } from "../../state/use-remote-environment-registry";
@@ -130,6 +141,8 @@ export async function performAutomation(request: AutomationRequest): Promise<voi
   const { params } = request;
   const environmentId = params.environmentId as EnvironmentId | undefined;
   const threadId = params.threadId as ThreadId | undefined;
+  // Extra fields the action wants in its report (e.g. the thread it created).
+  const extra: Record<string, unknown> = {};
   try {
     switch (request.action) {
       case "report":
@@ -161,6 +174,85 @@ export async function performAutomation(request: AutomationRequest): Promise<voi
         });
         break;
       }
+      case "new-thread": {
+        // Same path as NewTaskDraftScreen.handleStart when the environment is
+        // connected: one thread.turn.start with a createThread bootstrap.
+        // Project: `projectId` or the first project of the environment.
+        // Model: `model` slug among selectable options, else the project
+        // default, else the server default, else the first selectable model.
+        if (!environmentId) throw new Error("environmentId is required");
+        const text = params.text ?? "";
+        if (text.length === 0) throw new Error("text is required");
+        const projects = appAtomRegistry
+          .get(environmentProjects.projectsAtom)
+          .filter((project) => String(project.environmentId) === String(environmentId));
+        const project = params.projectId
+          ? projects.find((candidate) => String(candidate.id) === params.projectId)
+          : projects[0];
+        if (!project)
+          throw new Error(
+            `project not found (${projects.length} project(s) in environment; ids: ${projects
+              .map((candidate) => String(candidate.id))
+              .join(",")})`,
+          );
+        const config = appAtomRegistry.get(serverEnvironment.configValueAtom(environmentId));
+        const projectDefault = resolveSelectableModelSelection(
+          config,
+          project.defaultModelSelection ?? null,
+        );
+        const modelOptions = buildModelOptions(config, projectDefault);
+        const requested = params.model
+          ? modelOptions.find((option) => option.selection.model === params.model)?.selection
+          : undefined;
+        const modelSelection: ModelSelection | null =
+          requested ??
+          projectDefault ??
+          modelOptions.find((option) => option.isDefault)?.selection ??
+          modelOptions[0]?.selection ??
+          null;
+        if (!modelSelection)
+          throw new Error(
+            `no selectable model (config ${config ? "present" : "absent"}, ${modelOptions.length} option(s))`,
+          );
+        const metadata = makeTurnCommandMetadata();
+        extra.threadId = metadata.threadId;
+        extra.projectId = String(project.id);
+        extra.modelSelection = modelSelection;
+        const result = await runAtomCommand(
+          appAtomRegistry,
+          threadEnvironment.startTurn,
+          {
+            environmentId,
+            input: buildProjectThreadStartTurnInput({
+              projectId: project.id,
+              projectCwd: project.workspaceRoot,
+              threadId: metadata.threadId,
+              commandId: metadata.commandId,
+              messageId: metadata.messageId,
+              createdAt: metadata.createdAt,
+              text,
+              attachments: [],
+              modelSelection,
+              runtimeMode: DEFAULT_RUNTIME_MODE,
+              interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+              workspaceMode: "local",
+              branch: null,
+              worktreePath: null,
+              startFromOrigin: false,
+              worktreeBranchName: buildTemporaryWorktreeBranchName(randomHex),
+            }),
+          },
+          { reportFailure: false },
+        );
+        if (result._tag !== "Success")
+          throw new Error(`new-thread failed: ${JSON.stringify(result)}`);
+        if (await waitForNavigation())
+          automationNavigationRef.navigate("Thread", {
+            environmentId: String(environmentId),
+            threadId: metadata.threadId,
+          });
+        break;
+      }
       case "interrupt": {
         if (!environmentId || !threadId) throw new Error("environmentId and threadId are required");
         const result = await runAtomCommand(
@@ -176,10 +268,11 @@ export async function performAutomation(request: AutomationRequest): Promise<voi
     }
     // Let navigation / outbox settle before the snapshot.
     await new Promise((resolve) => setTimeout(resolve, 600));
-    await writeReport(request, { ok: true, state: snapshotState() });
+    await writeReport(request, { ok: true, ...extra, state: snapshotState() });
   } catch (error) {
     await writeReport(request, {
       ok: false,
+      ...extra,
       error: error instanceof Error ? error.message : String(error),
       state: snapshotState(),
     });

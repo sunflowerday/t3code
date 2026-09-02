@@ -11,6 +11,7 @@ export const AUTOMATION_ACTIONS = [
   "open-web",
   "send",
   "interrupt",
+  "new-thread",
 ] as const;
 export type AutomationAction = (typeof AUTOMATION_ACTIONS)[number];
 
