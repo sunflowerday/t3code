@@ -32,13 +32,32 @@ import { environmentCatalog } from "../../connection/catalog";
 import { environmentPresentations } from "../../state/presentation";
 import { enqueueThreadOutboxMessage } from "../../state/thread-outbox";
 import { environmentThreadShells, threadEnvironment } from "../../state/threads";
+import { pendingConnectionErrorAtom } from "../../state/use-remote-environment-registry";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const automationNavigationRef = createNavigationContainerRef<any>();
 
+let armed: boolean | null = null;
+
+/**
+ * Armed only when the host has placed `Documents/automation/ARMED` in the App
+ * data container (possible only from the paired Mac, on a developer-installed
+ * build, via `devicectl device copy to`) or the embedded config says `.dev`.
+ * The embedded expo config of a personal-team build still carries the
+ * upstream production bundle id, so the file marker is the reliable switch.
+ */
 export function isAutomationArmed(): boolean {
+  if (armed !== null) return armed;
   const bundleId = Constants.expoConfig?.ios?.bundleIdentifier ?? "";
-  return bundleId.endsWith(".dev");
+  if (bundleId.endsWith(".dev")) return (armed = true);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { File, Paths } = require("expo-file-system") as typeof import("expo-file-system");
+    armed = new File(Paths.document, AUTOMATION_DIRECTORY, "ARMED").exists;
+  } catch {
+    armed = false;
+  }
+  return armed;
 }
 
 async function writeReport(request: AutomationRequest, body: Record<string, unknown>) {
@@ -79,6 +98,7 @@ function snapshotState() {
     : null;
   return {
     catalogReady: catalog.isReady,
+    pendingConnectionError: appAtomRegistry.get(pendingConnectionErrorAtom),
     environments: [...presentations.entries()].map(([environmentId, presentation]) => ({
       environmentId,
       phase: presentation.connection.phase,

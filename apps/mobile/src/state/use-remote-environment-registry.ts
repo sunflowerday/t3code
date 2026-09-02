@@ -28,7 +28,7 @@ const connectionPairingUrlAtom = Atom.make("").pipe(
   Atom.withLabel("mobile:connection-pairing-url"),
 );
 
-const pendingConnectionErrorAtom = Atom.make<string | null>(null).pipe(
+export const pendingConnectionErrorAtom = Atom.make<string | null>(null).pipe(
   Atom.keepAlive,
   Atom.withLabel("mobile:pending-connection-error"),
 );
