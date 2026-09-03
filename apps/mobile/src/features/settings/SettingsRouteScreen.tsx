@@ -38,6 +38,7 @@ import { WorkspaceSidebarToolbar } from "../layout/workspace-sidebar-toolbar";
 import { runtime } from "../../lib/runtime";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import { useCardsFirstScreen } from "../home/use-cards-first-screen";
 import { useThreadListV2Enabled } from "../threads/use-thread-list-v2-enabled";
 import {
   type AppUpdateCheckState,
@@ -544,6 +545,7 @@ function GeneralSettingsSection() {
   const navigation = useNavigation();
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const { cardsFirstScreenEnabled } = useCardsFirstScreen();
   const projectGroupingEnabled = AsyncResult.isSuccess(preferencesResult)
     ? preferencesResult.value.projectGroupingEnabled !== false
     : true;
@@ -554,6 +556,12 @@ function GeneralSettingsSection() {
         icon="square.split.2x1"
         label="治理牌"
         onPress={() => navigation.navigate("Web", govDeckWebParams())}
+      />
+      <SettingsSwitchRow
+        icon="square.stack.3d.up"
+        label="首屏显示卡片流"
+        value={cardsFirstScreenEnabled}
+        onValueChange={(value) => savePreferences({ cardsFirstScreenEnabled: value })}
       />
       <SettingsSwitchRow
         icon="folder"
