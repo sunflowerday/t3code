@@ -2,12 +2,16 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
   PHONE_CARDS_PATH,
+  buildAfterDispatchGateRecord,
   buildFirstScreenGateRecord,
+  buildFirstScreenResetRootState,
   describeFirstScreenDecision,
   isPhoneCardsLandingPath,
   resolveCardsFirstScreenEnabled,
   resolveFirstScreenRoute,
   shouldApplyFirstScreenRoute,
+  snapshotNavigationRootState,
+  subscribeWhenReady,
 } from "./firstScreen";
 import {
   hasInboundLaunchTarget,
@@ -340,5 +344,163 @@ describe("inbound launch target", () => {
     expect(hasInboundLaunchTarget()).toBe(true);
     markInboundLaunchTarget();
     expect(hasInboundLaunchTarget()).toBe(true);
+  });
+});
+
+describe("buildFirstScreenResetRootState", () => {
+  it("resets the container root to CardsHome with the stream path", () => {
+    expect(
+      buildFirstScreenResetRootState(resolveFirstScreenRoute({ cardsFirstScreenEnabled: true })),
+    ).toEqual({
+      index: 0,
+      routes: [{ name: "CardsHome", params: { path: PHONE_CARDS_PATH } }],
+    });
+  });
+
+  it("resets the container root to Home when cards-first is off", () => {
+    expect(
+      buildFirstScreenResetRootState(resolveFirstScreenRoute({ cardsFirstScreenEnabled: false })),
+    ).toEqual({
+      index: 0,
+      routes: [{ name: "Home" }],
+    });
+  });
+});
+
+describe("snapshotNavigationRootState", () => {
+  it("reads the live stack from routes, not the registered routeNames table", () => {
+    expect(
+      snapshotNavigationRootState({
+        index: 0,
+        routeNames: ["Home", "CardsHome", "Thread"],
+        routes: [{ name: "CardsHome" }],
+      }),
+    ).toEqual({ routeNames: ["CardsHome"], index: 0 });
+  });
+
+  it("marks a missing root as empty so a failed reset is not a fake 100%", () => {
+    expect(snapshotNavigationRootState(undefined)).toEqual({ routeNames: [], index: -1 });
+  });
+});
+
+describe("buildAfterDispatchGateRecord", () => {
+  it("is the host-pullable follow-up: reason after_dispatch, willDispatch false", () => {
+    const record = buildAfterDispatchGateRecord({
+      at: "2026-09-03T07:52:00.000Z",
+      cardsFirstScreenEnabled: true,
+      inboundLaunchTarget: false,
+      preferencesLoaded: true,
+      rootState: {
+        index: 0,
+        routes: [{ name: "CardsHome" }],
+      },
+    });
+    expect(record.reason).toBe("after_dispatch");
+    expect(record.decision).toBe("apply");
+    expect(record.willDispatch).toBe(false);
+    expect(record.routeNames).toEqual(["CardsHome"]);
+    expect(record.index).toBe(0);
+    expect(record.focusedRouteName).toBe("CardsHome");
+    expect(record.at).toBe("2026-09-03T07:52:00.000Z");
+  });
+
+  it("records an empty stack when getRootState had nothing", () => {
+    const record = buildAfterDispatchGateRecord({
+      at: "2026-09-03T07:52:00.000Z",
+      cardsFirstScreenEnabled: true,
+      inboundLaunchTarget: false,
+      preferencesLoaded: true,
+      rootState: undefined,
+    });
+    expect(record.reason).toBe("after_dispatch");
+    expect(record.routeNames).toEqual([]);
+    expect(record.index).toBe(-1);
+    expect(record.focusedRouteName).toBe(null);
+    expect(record.willDispatch).toBe(false);
+  });
+});
+
+describe("subscribeWhenReady", () => {
+  it("runs onReady now when the container is already ready", () => {
+    const calls: string[] = [];
+    const unsubscribe = subscribeWhenReady({
+      addListener: () => {
+        calls.push("listen");
+        return () => {
+          calls.push("unlisten");
+        };
+      },
+      isReady: () => true,
+      onReady: () => {
+        calls.push("ready");
+      },
+    });
+    expect(calls).toEqual(["ready"]);
+    unsubscribe();
+    expect(calls).toEqual(["ready"]);
+  });
+
+  it("waits for the ready event and does not drop the callback", () => {
+    const calls: string[] = [];
+    let listener: (() => void) | undefined;
+    const unsubscribe = subscribeWhenReady({
+      addListener: (onReady) => {
+        listener = onReady;
+        return () => {
+          calls.push("unlisten");
+          listener = undefined;
+        };
+      },
+      isReady: () => false,
+      onReady: () => {
+        calls.push("ready");
+      },
+    });
+    expect(calls).toEqual([]);
+    listener?.();
+    expect(calls).toEqual(["unlisten", "ready"]);
+    listener?.();
+    expect(calls).toEqual(["unlisten", "ready"]);
+    unsubscribe();
+  });
+
+  it("runs onReady once if the container becomes ready between the check and the listener", () => {
+    const calls: string[] = [];
+    let ready = false;
+    subscribeWhenReady({
+      addListener: (onReady) => {
+        ready = true;
+        onReady();
+        return () => {
+          calls.push("unlisten");
+        };
+      },
+      isReady: () => ready,
+      onReady: () => {
+        calls.push("ready");
+      },
+    });
+    expect(calls.filter((call) => call === "ready")).toEqual(["ready"]);
+    expect(calls).toContain("unlisten");
+  });
+
+  it("does not run onReady after unsubscribe", () => {
+    const calls: string[] = [];
+    let listener: (() => void) | undefined;
+    const unsubscribe = subscribeWhenReady({
+      addListener: (onReady) => {
+        listener = onReady;
+        return () => {
+          calls.push("unlisten");
+        };
+      },
+      isReady: () => false,
+      onReady: () => {
+        calls.push("ready");
+      },
+    });
+    unsubscribe();
+    listener?.();
+    expect(calls).toEqual(["unlisten"]);
   });
 });
