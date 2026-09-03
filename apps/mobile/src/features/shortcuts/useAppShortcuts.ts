@@ -8,6 +8,7 @@ import {
   saveRecentThreadShortcuts,
   type RecentThreadShortcut,
 } from "../../persistence/imperative";
+import { markInboundLaunchTarget } from "../home/firstScreenLaunch";
 import { useThreadShell } from "../../state/entities";
 import {
   activeThreadRef,
@@ -39,6 +40,7 @@ function useShortcutNavigation(): void {
       handledInitialAction.current = true;
       const initialHref = QuickActions.initial ? shortcutHref(QuickActions.initial) : null;
       if (initialHref !== null) {
+        markInboundLaunchTarget();
         linkTo(initialHref);
       }
     }
@@ -46,6 +48,7 @@ function useShortcutNavigation(): void {
     const subscription = QuickActions.addListener((action) => {
       const href = shortcutHref(action);
       if (href !== null) {
+        markInboundLaunchTarget();
         linkTo(href);
       }
     });

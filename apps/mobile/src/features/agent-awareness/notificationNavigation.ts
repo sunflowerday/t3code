@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import { useLinkTo } from "@react-navigation/native";
 
+import { markInboundLaunchTarget } from "../home/firstScreenLaunch";
 import { routeAgentNotificationResponseOnce } from "./notificationPayload";
 import { consumeLastAgentNotificationResponse } from "./notificationResponseConsumer";
 
@@ -14,7 +15,10 @@ export function useAgentNotificationNavigation(): void {
       routeAgentNotificationResponseOnce({
         handledResponseIds: handledResponseIds.current,
         response,
-        navigate: linkTo,
+        navigate: (deepLink) => {
+          markInboundLaunchTarget();
+          linkTo(deepLink);
+        },
       });
     };
 

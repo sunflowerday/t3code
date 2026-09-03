@@ -25,6 +25,7 @@ import {
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 
+import { markInboundLaunchTarget } from "../home/firstScreenLaunch";
 import {
   AUTOMATION_DIRECTORY,
   type AutomationRequest,
@@ -150,11 +151,13 @@ export async function performAutomation(request: AutomationRequest): Promise<voi
       case "open-thread": {
         if (!environmentId || !threadId) throw new Error("environmentId and threadId are required");
         if (!(await waitForNavigation())) throw new Error("navigation not ready");
+        markInboundLaunchTarget();
         automationNavigationRef.navigate("Thread", { environmentId, threadId });
         break;
       }
       case "open-web": {
         if (!(await waitForNavigation())) throw new Error("navigation not ready");
+        markInboundLaunchTarget();
         automationNavigationRef.navigate("Web", { path: params.path ?? "/" });
         break;
       }
@@ -246,11 +249,13 @@ export async function performAutomation(request: AutomationRequest): Promise<voi
         );
         if (result._tag !== "Success")
           throw new Error(`new-thread failed: ${JSON.stringify(result)}`);
-        if (await waitForNavigation())
+        if (await waitForNavigation()) {
+          markInboundLaunchTarget();
           automationNavigationRef.navigate("Thread", {
             environmentId: String(environmentId),
             threadId: metadata.threadId,
           });
+        }
         break;
       }
       case "interrupt": {
