@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
   PHONE_CARDS_PATH,
+  buildFirstScreenGateRecord,
+  describeFirstScreenDecision,
   isPhoneCardsLandingPath,
   resolveCardsFirstScreenEnabled,
   resolveFirstScreenRoute,
@@ -162,6 +164,107 @@ describe("shouldApplyFirstScreenRoute", () => {
         index: 0,
       }),
     ).toBe(false);
+  });
+});
+
+describe("describeFirstScreenDecision", () => {
+  const cards = resolveFirstScreenRoute({ cardsFirstScreenEnabled: true });
+  const threads = resolveFirstScreenRoute({ cardsFirstScreenEnabled: false });
+
+  it("names every skip the gate can hit on a real device", () => {
+    expect(
+      describeFirstScreenDecision({
+        route: cards,
+        preferencesLoaded: false,
+        routeNames: ["Home"],
+        index: 0,
+      }),
+    ).toEqual({ decision: "skip", reason: "preferences_not_loaded" });
+    expect(
+      describeFirstScreenDecision({
+        route: threads,
+        preferencesLoaded: true,
+        routeNames: ["Home"],
+        index: 0,
+      }),
+    ).toEqual({ decision: "skip", reason: "cards_first_disabled" });
+    expect(
+      describeFirstScreenDecision({
+        inboundLaunchTarget: true,
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Home"],
+        index: 0,
+      }),
+    ).toEqual({ decision: "skip", reason: "inbound_launch_target" });
+    expect(
+      describeFirstScreenDecision({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Thread"],
+        index: 0,
+      }),
+    ).toEqual({ decision: "skip", reason: "inbound_thread_only_stack" });
+    expect(
+      describeFirstScreenDecision({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Web"],
+        index: 0,
+      }),
+    ).toEqual({ decision: "skip", reason: "not_a_launch_stack" });
+  });
+
+  it("names the two apply shapes", () => {
+    expect(
+      describeFirstScreenDecision({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Home"],
+        index: 0,
+      }),
+    ).toEqual({ decision: "apply", reason: "untouched_home" });
+    expect(
+      describeFirstScreenDecision({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Home", "Thread"],
+        index: 1,
+      }),
+    ).toEqual({ decision: "apply", reason: "restored_thread" });
+  });
+});
+
+describe("buildFirstScreenGateRecord", () => {
+  it("is the host-pullable shape: routeNames and decision always present", () => {
+    const record = buildFirstScreenGateRecord({
+      at: "2026-09-03T07:15:00.000Z",
+      cardsFirstScreenEnabled: true,
+      inboundLaunchTarget: false,
+      index: 0,
+      preferencesLoaded: true,
+      routeNames: ["Home"],
+    });
+    expect(record.routeNames).toEqual(["Home"]);
+    expect(record.decision).toBe("apply");
+    expect(record.reason).toBe("untouched_home");
+    expect(record.willDispatch).toBe(true);
+    expect(record.focusedRouteName).toBe("Home");
+    expect(record.at).toBe("2026-09-03T07:15:00.000Z");
+  });
+
+  it("records a skip without claiming a dispatch", () => {
+    const record = buildFirstScreenGateRecord({
+      at: "2026-09-03T07:15:00.000Z",
+      cardsFirstScreenEnabled: true,
+      inboundLaunchTarget: true,
+      index: 0,
+      preferencesLoaded: true,
+      routeNames: ["Home"],
+    });
+    expect(record.decision).toBe("skip");
+    expect(record.reason).toBe("inbound_launch_target");
+    expect(record.willDispatch).toBe(false);
   });
 });
 

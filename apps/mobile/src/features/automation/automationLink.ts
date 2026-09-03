@@ -25,6 +25,7 @@ import {
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 
+import type { FirstScreenGateRecord } from "../home/firstScreen";
 import { markInboundLaunchTarget } from "../home/firstScreenLaunch";
 import {
   AUTOMATION_DIRECTORY,
@@ -72,25 +73,23 @@ export function isAutomationArmed(): boolean {
   return armed;
 }
 
-async function writeReport(request: AutomationRequest, body: Record<string, unknown>) {
+async function writeAutomationJson(filename: string, body: object) {
   const { Directory, File, Paths } = await import("expo-file-system");
   const directory = new Directory(Paths.document, AUTOMATION_DIRECTORY);
   directory.create({ idempotent: true, intermediates: true });
-  const file = new File(directory, `${request.runId}-${request.action}.json`);
+  const file = new File(directory, filename);
   file.create({ intermediates: true, overwrite: true });
-  file.write(
-    JSON.stringify(
-      {
-        runId: request.runId,
-        action: request.action,
-        params: request.params,
-        at: new Date().toISOString(),
-        ...body,
-      },
-      null,
-      2,
-    ),
-  );
+  file.write(JSON.stringify(body, null, 2));
+}
+
+async function writeReport(request: AutomationRequest, body: Record<string, unknown>) {
+  await writeAutomationJson(`${request.runId}-${request.action}.json`, {
+    runId: request.runId,
+    action: request.action,
+    params: request.params,
+    at: new Date().toISOString(),
+    ...body,
+  });
 }
 
 /** Side-channel for screens (Web page load result, connection toasts). */
@@ -99,6 +98,15 @@ export function automationNote(kind: string, body: Record<string, unknown>): voi
   void writeReport({ action: "report", runId: `note-${Date.now()}`, params: { kind } }, body).catch(
     () => {},
   );
+}
+
+/**
+ * One file per FirstScreenGate effect run, pulled by the host as
+ * `Documents/automation/gate-*.json`. No-ops unless automation is armed.
+ */
+export function writeFirstScreenGateRecord(body: FirstScreenGateRecord): void {
+  if (!isAutomationArmed()) return;
+  void writeAutomationJson(`gate-${Date.now()}.json`, body).catch(() => {});
 }
 
 function snapshotState() {

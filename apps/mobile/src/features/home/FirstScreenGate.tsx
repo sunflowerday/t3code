@@ -1,7 +1,8 @@
 import { CommonActions, NavigationState, useNavigation } from "@react-navigation/native";
 import { useEffect } from "react";
 
-import { resolveFirstScreenRoute, shouldApplyFirstScreenRoute } from "./firstScreen";
+import { writeFirstScreenGateRecord } from "../automation/automationLink";
+import { buildFirstScreenGateRecord, resolveFirstScreenRoute } from "./firstScreen";
 import { hasInboundLaunchTarget } from "./firstScreenLaunch";
 import { useCardsFirstScreen } from "./use-cards-first-screen";
 
@@ -22,18 +23,19 @@ export function FirstScreenGate(props: { readonly state: NavigationState }) {
   const { cardsFirstScreenEnabled, preferencesLoaded } = useCardsFirstScreen();
 
   useEffect(() => {
-    const route = resolveFirstScreenRoute({ cardsFirstScreenEnabled });
-    if (
-      !shouldApplyFirstScreenRoute({
-        inboundLaunchTarget: hasInboundLaunchTarget(),
-        index: props.state.index,
-        preferencesLoaded,
-        route,
-        routeNames: props.state.routes.map((screen) => screen.name),
-      })
-    ) {
+    const record = buildFirstScreenGateRecord({
+      at: new Date().toISOString(),
+      cardsFirstScreenEnabled,
+      inboundLaunchTarget: hasInboundLaunchTarget(),
+      index: props.state.index,
+      preferencesLoaded,
+      routeNames: props.state.routes.map((screen) => screen.name),
+    });
+    writeFirstScreenGateRecord(record);
+    if (!record.willDispatch) {
       return;
     }
+    const route = resolveFirstScreenRoute({ cardsFirstScreenEnabled });
     navigation.dispatch(
       CommonActions.reset({
         index: 0,
