@@ -100,7 +100,7 @@ describe("buildHomeListLayout", () => {
 
   it("limits large groups to the initial visible count with a show-more row", () => {
     const layout = buildHomeListLayout({
-      groups: [makeGroup("alpha", 133)],
+      groups: [makeGroup("alpha", HOME_INITIAL_VISIBLE_THREADS + 100)],
       displayStates: displayStates({}),
     });
 
@@ -109,7 +109,7 @@ describe("buildHomeListLayout", () => {
     expect(layout.items.at(-1)).toMatchObject({
       type: "show-more",
       groupKey: "alpha",
-      hiddenCount: 133 - HOME_INITIAL_VISIBLE_THREADS,
+      hiddenCount: 100,
       canShowLess: false,
     });
     // The show-more row takes over the last slot, so no thread is marked last.
@@ -117,7 +117,7 @@ describe("buildHomeListLayout", () => {
   });
 
   it("reveals more threads per show-more step and offers show-less when exhausted", () => {
-    const group = makeGroup("alpha", 20);
+    const group = makeGroup("alpha", HOME_INITIAL_VISIBLE_THREADS + 2 * HOME_SHOW_MORE_STEP);
 
     const expandedOnce = buildHomeListLayout({
       groups: [group],
@@ -130,7 +130,7 @@ describe("buildHomeListLayout", () => {
     );
     expect(expandedOnce.items.at(-1)).toMatchObject({
       type: "show-more",
-      hiddenCount: 4,
+      hiddenCount: HOME_SHOW_MORE_STEP,
       canShowLess: true,
     });
 
@@ -143,7 +143,9 @@ describe("buildHomeListLayout", () => {
         ),
       }),
     });
-    expect(fullyExpanded.items.filter((item) => item.type === "thread")).toHaveLength(20);
+    expect(fullyExpanded.items.filter((item) => item.type === "thread")).toHaveLength(
+      HOME_INITIAL_VISIBLE_THREADS + 2 * HOME_SHOW_MORE_STEP,
+    );
     expect(fullyExpanded.items.at(-1)).toMatchObject({
       type: "show-more",
       hiddenCount: 0,
@@ -231,12 +233,17 @@ describe("buildHomeListLayout", () => {
 
   it("keeps sticky indices aligned across multiple expanded groups", () => {
     const layout = buildHomeListLayout({
-      groups: [makeGroup("alpha", 8), makeGroup("beta", 1)],
+      groups: [makeGroup("alpha", HOME_INITIAL_VISIBLE_THREADS + 1), makeGroup("beta", 1)],
       displayStates: displayStates({}),
     });
 
-    // header + 6 threads + show-more = 8 items, so beta's header is index 8.
-    expect(layout.stickyHeaderIndices).toEqual([0, 8]);
-    expect(layout.items[8]).toMatchObject({ type: "header", isFirst: false });
+    // Alpha fills the initial page, so its block is header + 500 visible
+    // threads + show-more = HOME_INITIAL_VISIBLE_THREADS + 2 items, and beta's
+    // header lands at that index.
+    expect(layout.stickyHeaderIndices).toEqual([0, HOME_INITIAL_VISIBLE_THREADS + 2]);
+    expect(layout.items[HOME_INITIAL_VISIBLE_THREADS + 2]).toMatchObject({
+      type: "header",
+      isFirst: false,
+    });
   });
 });
