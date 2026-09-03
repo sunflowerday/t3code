@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Linking, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -6,6 +6,7 @@ import { useNavigation, type StaticScreenProps } from "@react-navigation/native"
 import type { PreparedHttpAuthorization } from "@t3tools/client-runtime/connection";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { AppText as Text } from "../../components/AppText";
+import { isPhoneCardsLandingPath } from "../home/firstScreen";
 import { useEnvironments } from "../../state/environments";
 import { usePreparedConnection } from "../../state/session";
 import { automationNote } from "../automation/automationLink";
@@ -96,7 +97,9 @@ export function PhoneWebRouteScreen({
   route,
 }: StaticScreenProps<{ readonly path?: string } | undefined>) {
   const path = resolvePhoneWebPath(route.params?.path);
+  const isCardsLanding = isPhoneCardsLandingPath(path);
   const targetUri = `${ORIGIN}${path}`;
+  const navigation = useNavigation();
   const { environments, isReady } = useEnvironments();
   const prepared = usePreparedConnection(selectPhoneEnvironmentId(environments));
   const auth = prepared._tag === "Some" ? prepared.value.httpAuthorization : null;
@@ -145,6 +148,22 @@ export function PhoneWebRouteScreen({
     }
     if (isReady) setError(ERR);
   }
+  const openThreadList = useCallback(() => {
+    navigation.navigate("Home", undefined, { pop: true });
+  }, [navigation]);
+  const renderThreadListHeaderButton = useCallback(
+    () => <ThreadListHeaderButton onPress={openThreadList} />,
+    [openThreadList],
+  );
+  useLayoutEffect(() => {
+    // The stream and a single card share one screen instance, so the header has
+    // to go back to the static blank when the path stops being the landing.
+    navigation.setOptions(
+      isCardsLanding
+        ? { headerRight: renderThreadListHeaderButton, title: "卡片" }
+        : { headerRight: undefined, title: "" },
+    );
+  }, [isCardsLanding, navigation, renderThreadListHeaderButton]);
   return (
     <SafeAreaView
       className={error ? "items-center justify-center gap-3 px-6" : undefined}
@@ -183,6 +202,20 @@ export function PhoneWebRouteScreen({
         />
       )}
     </SafeAreaView>
+  );
+}
+
+function ThreadListHeaderButton(props: { readonly onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityLabel="线程"
+      accessibilityRole="button"
+      hitSlop={12}
+      onPress={props.onPress}
+      className="px-3 py-2 active:opacity-60"
+    >
+      <Text className="text-base font-t3-bold text-foreground">线程</Text>
+    </Pressable>
   );
 }
 

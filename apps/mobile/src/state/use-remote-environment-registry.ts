@@ -17,7 +17,7 @@ import {
 } from "../state/environments";
 import { useWorkspaceState } from "../state/workspace";
 import type { SavedRemoteConnection } from "../lib/connection";
-import { presentUserFacingError } from "../lib/userFacingError";
+import { describeServerError, presentUserFacingError } from "../lib/userFacingError";
 import { appAtomRegistry } from "./atom-registry";
 import type { ConnectedEnvironmentSummary, EnvironmentRuntimeState } from "./remote-runtime-types";
 import { environmentSession, usePreparedConnection } from "./session";
@@ -167,9 +167,8 @@ export function useRemoteConnections() {
       setPendingConnectionError(null);
       const result = await controller.connectPairingUrl(nextPairingUrl);
       if (AsyncResult.isFailure(result)) {
-        const error = Cause.squash(result.cause);
         const message = presentUserFacingError(
-          error instanceof Error ? error.message : null,
+          describeServerError(Cause.squash(result.cause)),
           "Failed to pair with the environment.",
         );
         setPendingConnectionError(message);

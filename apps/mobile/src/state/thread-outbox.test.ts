@@ -570,7 +570,7 @@ describe("thread outbox", () => {
     expect(isQueuedThreadCreationSendable(base)).toBe(false);
   });
 
-  it("retries transport failures but drops deterministic command failures", () => {
+  it("retries transport failures but parks deterministic command failures for the user", () => {
     expect(shouldRetryThreadOutboxDelivery(new Error("Socket is not connected"))).toBe(true);
     expect(
       shouldRetryThreadOutboxDelivery({
@@ -581,7 +581,7 @@ describe("thread outbox", () => {
     expect(shouldRetryThreadOutboxDelivery(new Error("Thread no longer exists"))).toBe(false);
   });
 
-  it("retains queued messages when settings synchronization fails before startTurn", () => {
+  it("retries when settings synchronization fails, but parks a deterministic start-turn rejection", () => {
     const deterministicFailure = new Error("Thread no longer exists");
 
     expect(
@@ -591,12 +591,15 @@ describe("thread outbox", () => {
         interrupted: false,
       }),
     ).toBe("retry");
+    // A server-explicit rejection must never discard the user's turn: the
+    // message stays queued ("fail" parks it with a visible reason) so the
+    // App can surface why and let the user edit or retry.
     expect(
       resolveThreadOutboxFailureAction({
         stage: "start-turn",
         error: deterministicFailure,
         interrupted: false,
       }),
-    ).toBe("discard");
+    ).toBe("fail");
   });
 });

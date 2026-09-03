@@ -25,18 +25,23 @@ import {
   confirmThreadOutboxMessageQueued,
   ensureThreadOutboxLoaded,
   removeThreadOutboxMessage,
+  updateThreadOutboxMessage,
 } from "./thread-outbox";
 import { automationNote } from "../features/automation/automationLink";
+import { describeCauseMessage, presentUserFacingError } from "../lib/userFacingError";
 import {
   isQueuedThreadCreationSendable,
+  isThreadOutboxSessionBusy,
   modelSelectionsEqual,
-  resolveThreadOutboxDeliveryAction,
+  resolveThreadOutboxDrainEvaluation,
   resolveThreadOutboxFailureAction,
   resolveQueuedThreadSettings,
   threadOutboxRetryDelayMs,
+  THREAD_OUTBOX_WAIT_RETRY_DELAY_MS,
   type QueuedThreadCreation,
   type QueuedThreadMessage,
   type ThreadOutboxCommandStage,
+  type ThreadOutboxFailureAction,
 } from "./thread-outbox-model";
 import { environmentThreadShells, threadEnvironment } from "./threads";
 import { useAtomCommand } from "./use-atom-command";
@@ -45,12 +50,23 @@ import {
   useThreadOutboxMessages,
   useThreadOutboxShellStatuses,
 } from "./use-thread-outbox";
-import { useRemoteConnectionStatus } from "./use-remote-environment-registry";
+import {
+  setPendingConnectionError,
+  useRemoteConnectionStatus,
+} from "./use-remote-environment-registry";
 
 export const dispatchingQueuedMessageIdAtom = Atom.make<MessageId | null>(null).pipe(
   Atom.keepAlive,
   Atom.withLabel("mobile:thread-outbox:dispatching-message-id"),
 );
+
+/**
+ * `delivered`: the turn reached the server and the queue entry was removed.
+ * `retry`: a transient failure — keep the entry and re-attempt on backoff.
+ * `failed`: the server explicitly rejected the turn — keep the entry parked
+ * with its reason so the user can see and act on it; no further auto-retry.
+ */
+type ThreadOutboxDeliveryOutcome = "delivered" | "retry" | "failed";
 
 function beginDispatchingQueuedMessage(queuedMessageId: MessageId): void {
   appAtomRegistry.set(dispatchingQueuedMessageIdAtom, queuedMessageId);
@@ -123,23 +139,23 @@ export function useThreadOutboxDrain(): void {
     const reportFailure = (
       commandResult: AtomCommandResult<unknown, unknown>,
       stage: ThreadOutboxCommandStage,
-    ): boolean => {
+    ): ThreadOutboxFailureAction | "success" => {
       if (!AsyncResult.isFailure(commandResult)) {
-        return false;
+        return "success";
       }
+      const error = Cause.squash(commandResult.cause);
       const action = resolveThreadOutboxFailureAction({
         stage,
-        error: Cause.squash(commandResult.cause),
+        error,
         interrupted: Cause.hasInterruptsOnly(commandResult.cause),
       });
-      const retry = action === "retry";
       automationNote("outbox-failure", {
         environmentId: queuedMessage.environmentId,
         threadId: queuedMessage.threadId,
         messageId: queuedMessage.messageId,
         stage,
         action,
-        cause: String(Cause.squash(commandResult.cause)),
+        cause: String(error),
         pretty: Cause.pretty(commandResult.cause).slice(0, 2000),
       });
       console.warn("[thread-outbox] queued message delivery failed", {
@@ -148,20 +164,35 @@ export function useThreadOutboxDrain(): void {
         messageId: queuedMessage.messageId,
         stage,
         cause: commandResult.cause,
-        retry,
+        action,
       });
-      return retry;
+      if (action === "fail") {
+        // Park the rejected turn instead of discarding it: keep it queued with
+        // the server's own sentence and surface that sentence, so the message
+        // neither vanishes silently nor hammers the server on repeat backoff.
+        const reason = presentUserFacingError(
+          describeCauseMessage(commandResult.cause),
+          "The environment rejected this message.",
+        );
+        void updateThreadOutboxMessage({ ...queuedMessage, failureReason: reason });
+        setPendingConnectionError(reason);
+      }
+      return action;
     };
     const completeDelivery = async (
       deliveryResult: AtomCommandResult<unknown, unknown>,
-    ): Promise<boolean> => {
-      if (reportFailure(deliveryResult, "start-turn")) {
-        return false;
+    ): Promise<ThreadOutboxDeliveryOutcome> => {
+      const action = reportFailure(deliveryResult, "start-turn");
+      if (action === "retry") {
+        return "retry";
+      }
+      if (action === "fail") {
+        return "failed";
       }
 
       try {
         await removeThreadOutboxMessage(queuedMessage);
-        return true;
+        return "delivered";
       } catch (error) {
         console.warn("[thread-outbox] failed to remove delivered queued message", {
           environmentId: queuedMessage.environmentId,
@@ -169,14 +200,33 @@ export function useThreadOutboxDrain(): void {
           messageId: queuedMessage.messageId,
           error,
         });
-        return false;
+        return "retry";
       }
     };
     return { reportFailure, completeDelivery };
   }, []);
 
+  // A `wait` is the one delivery decision that produces no follow-up: a failed
+  // send gets a backoff timer, a wait got nothing, so any state transition the
+  // atom store never learns about left the message queued until relaunch. Arm a
+  // single re-evaluation pass instead, and let the drain deps short-circuit it
+  // whenever shell, thread or connection state does move.
+  const armWaitReEvaluation = useCallback((queuedMessageId: MessageId, delayMs: number | null) => {
+    if (delayMs === null || retryTimersRef.current.has(queuedMessageId)) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      retryTimersRef.current.delete(queuedMessageId);
+      setRetryTick((current) => current + 1);
+    }, delayMs);
+    retryTimersRef.current.set(queuedMessageId, timer);
+  }, []);
+
   const sendQueuedMessage = useCallback(
-    async (queuedMessage: QueuedThreadMessage, thread: EnvironmentThreadShell) => {
+    async (
+      queuedMessage: QueuedThreadMessage,
+      thread: EnvironmentThreadShell,
+    ): Promise<ThreadOutboxDeliveryOutcome> => {
       const settings = resolveQueuedThreadSettings(queuedMessage, thread);
       const { reportFailure, completeDelivery } = makeDeliveryHelpers(queuedMessage);
 
@@ -190,8 +240,8 @@ export function useThreadOutboxDrain(): void {
           },
         });
         if (AsyncResult.isFailure(updateResult)) {
-          reportFailure(updateResult, "settings-sync");
-          return false;
+          const action = reportFailure(updateResult, "settings-sync");
+          return action === "fail" ? "failed" : "retry";
         }
       }
 
@@ -206,8 +256,8 @@ export function useThreadOutboxDrain(): void {
           },
         });
         if (AsyncResult.isFailure(runtimeResult)) {
-          reportFailure(runtimeResult, "settings-sync");
-          return false;
+          const action = reportFailure(runtimeResult, "settings-sync");
+          return action === "fail" ? "failed" : "retry";
         }
       }
 
@@ -222,8 +272,8 @@ export function useThreadOutboxDrain(): void {
           },
         });
         if (AsyncResult.isFailure(interactionResult)) {
-          reportFailure(interactionResult, "settings-sync");
-          return false;
+          const action = reportFailure(interactionResult, "settings-sync");
+          return action === "fail" ? "failed" : "retry";
         }
       }
 
@@ -260,10 +310,10 @@ export function useThreadOutboxDrain(): void {
       queuedMessage: QueuedThreadMessage,
       creation: QueuedThreadCreation,
       projectCwd: string,
-    ) => {
+    ): Promise<ThreadOutboxDeliveryOutcome> => {
       const modelSelection = queuedMessage.modelSelection;
       if (modelSelection === undefined) {
-        return false;
+        return "retry";
       }
       const { completeDelivery } = makeDeliveryHelpers(queuedMessage);
       const deliveryResult = await startTurn({
@@ -305,6 +355,12 @@ export function useThreadOutboxDrain(): void {
       if (editingQueuedMessageIds[nextQueuedMessage.messageId]) {
         continue;
       }
+      if (nextQueuedMessage.failureReason !== undefined) {
+        // The server rejected this turn and its reason is on screen; stay parked
+        // so we neither discard the user's message nor re-hammer a rejection.
+        // Editing or deleting the entry re-arms it.
+        continue;
+      }
       if ((retryNotBeforeRef.current.get(nextQueuedMessage.messageId) ?? 0) > Date.now()) {
         continue;
       }
@@ -319,24 +375,26 @@ export function useThreadOutboxDrain(): void {
         (candidate) => candidate.environmentId === nextQueuedMessage.environmentId,
       );
       const shellStatus = shellStatuses.get(nextQueuedMessage.environmentId) ?? "empty";
-      const deliveryAction = resolveThreadOutboxDeliveryAction({
+      const evaluation = resolveThreadOutboxDrainEvaluation({
         isCreation: creation !== undefined,
         threadExists: thread !== undefined,
         shellStatus,
         environmentConnected: environment?.connectionState === "connected",
-        threadBusy: thread?.session?.status === "running" || thread?.session?.status === "starting",
+        threadSessionStatus: thread?.session?.status ?? null,
+        connectionState: environment?.connectionState ?? null,
       });
+      const { deliveryAction } = evaluation;
       automationNote("outbox-delivery", {
         threadId: nextQueuedMessage.threadId,
         messageId: nextQueuedMessage.messageId,
-        deliveryAction,
-        isCreation: creation !== undefined,
-        threadExists: thread !== undefined,
-        shellStatus,
-        connectionState: environment?.connectionState ?? null,
-        threadSessionStatus: thread?.session?.status ?? null,
+        ...evaluation.report,
       });
       if (deliveryAction === "wait") {
+        // Nothing here schedules itself by changing a dep: re-evaluate on the
+        // next shell/thread/connection change *and* on the armed fallback tick,
+        // so a state transition this client never learns about cannot strand
+        // the message until the app is relaunched.
+        armWaitReEvaluation(nextQueuedMessage.messageId, evaluation.waitRetryDelayMs);
         continue;
       }
       // The live project shell is preferred for the workspace path, with the
@@ -360,9 +418,9 @@ export function useThreadOutboxDrain(): void {
       }
 
       beginDispatchingQueuedMessage(nextQueuedMessage.messageId);
-      const removeQueuedMessage = (warning: string) =>
+      const removeQueuedMessage = (warning: string): Promise<ThreadOutboxDeliveryOutcome> =>
         removeThreadOutboxMessage(nextQueuedMessage).then(
-          () => true,
+          () => "delivered" as const,
           (error) => {
             console.warn(warning, {
               environmentId: nextQueuedMessage.environmentId,
@@ -370,47 +428,58 @@ export function useThreadOutboxDrain(): void {
               messageId: nextQueuedMessage.messageId,
               error,
             });
-            return false;
+            return "retry" as const;
           },
         );
       // Enqueues publish optimistically before their durable write settles.
       // Confirm the write landed (and the message wasn't rolled back) before
       // sending, so a failed write can never chase an already-delivered turn.
-      const delivery = confirmThreadOutboxMessageQueued(nextQueuedMessage).then((queued) => {
-        if (!queued) {
-          // Rolled back by a failed write; nothing to deliver or retry.
-          return true;
-        }
-        // The guards evaluated before the confirmation await are stale by now:
-        // the thread may have gone busy, or the user may have opened this
-        // message in the editor. Re-read both and defer to the next drain pass
-        // (returning true skips the failure/backoff path) rather than sending
-        // a payload the user is editing or racing an active turn.
-        if (appAtomRegistry.get(editingQueuedMessageIdsAtom)[nextQueuedMessage.messageId]) {
-          return true;
-        }
-        const freshThread = findThread(
-          appAtomRegistry.get(environmentThreadShells.threadShellsAtom),
-          nextQueuedMessage,
-        );
-        const freshThreadBusy =
-          freshThread?.session?.status === "running" || freshThread?.session?.status === "starting";
-        if (deliveryAction === "send" && creation === undefined && freshThreadBusy) {
-          return true;
-        }
-        return deliveryAction === "remove"
-          ? removeQueuedMessage("[thread-outbox] failed to remove message for a missing thread")
-          : creation !== undefined
-            ? creationProjectCwd !== null
-              ? sendQueuedCreation(nextQueuedMessage, creation, creationProjectCwd)
-              : removeQueuedMessage("[thread-outbox] dropped pending task for a missing project")
-            : thread !== undefined
-              ? sendQueuedMessage(nextQueuedMessage, thread)
-              : Promise.resolve(false);
-      });
+      const delivery = confirmThreadOutboxMessageQueued(nextQueuedMessage).then(
+        async (queued): Promise<ThreadOutboxDeliveryOutcome> => {
+          if (!queued) {
+            // Rolled back by a failed write; nothing to deliver or retry.
+            return "delivered";
+          }
+          // The guards evaluated before the confirmation await are stale by now:
+          // the thread may have gone busy, or the user may have opened this
+          // message in the editor. Defer to the next drain pass (returning
+          // "delivered" skips the failure/backoff path) rather than sending a
+          // payload the user is editing or racing an active turn.
+          if (appAtomRegistry.get(editingQueuedMessageIdsAtom)[nextQueuedMessage.messageId]) {
+            return "delivered";
+          }
+          const freshThread = findThread(
+            appAtomRegistry.get(environmentThreadShells.threadShellsAtom),
+            nextQueuedMessage,
+          );
+          if (
+            deliveryAction === "send" &&
+            creation === undefined &&
+            isThreadOutboxSessionBusy(freshThread?.session?.status)
+          ) {
+            // Deferred, not delivered: the turn that blocked us may already be
+            // over by the time the store notices, so keep a wake-up armed.
+            // finishDispatching then retriggers this effect; if the session is
+            // still starting/running the wait branch arms the same fallback.
+            armWaitReEvaluation(nextQueuedMessage.messageId, THREAD_OUTBOX_WAIT_RETRY_DELAY_MS);
+            return "delivered";
+          }
+          return deliveryAction === "remove"
+            ? removeQueuedMessage("[thread-outbox] failed to remove message for a missing thread")
+            : creation !== undefined
+              ? creationProjectCwd !== null
+                ? sendQueuedCreation(nextQueuedMessage, creation, creationProjectCwd)
+                : removeQueuedMessage("[thread-outbox] dropped pending task for a missing project")
+              : thread !== undefined
+                ? sendQueuedMessage(nextQueuedMessage, thread)
+                : Promise.resolve<ThreadOutboxDeliveryOutcome>("retry");
+        },
+      );
       void delivery
-        .then((sent) => {
-          if (sent) {
+        .then((outcome) => {
+          // A parked rejection and a successful delivery both clear retry state;
+          // only a transient "retry" reschedules a backoff attempt.
+          if (outcome !== "retry") {
             retryAttemptRef.current.delete(nextQueuedMessage.messageId);
             retryNotBeforeRef.current.delete(nextQueuedMessage.messageId);
             const pendingTimer = retryTimersRef.current.get(nextQueuedMessage.messageId);
@@ -441,6 +510,7 @@ export function useThreadOutboxDrain(): void {
       return;
     }
   }, [
+    armWaitReEvaluation,
     connectedEnvironments,
     dispatchingQueuedMessageId,
     editingQueuedMessageIds,
@@ -449,6 +519,9 @@ export function useThreadOutboxDrain(): void {
     retryTick,
     sendQueuedCreation,
     sendQueuedMessage,
+    // threads + shellStatuses are how a `wait` gets re-evaluated the moment the
+    // thread session or the environment shell moves; retryTick is the armed
+    // fallback for transitions that never reach this client at all.
     shellStatuses,
     threads,
   ]);

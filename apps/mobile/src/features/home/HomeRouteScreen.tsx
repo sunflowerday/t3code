@@ -1,6 +1,7 @@
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationOptions } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useState } from "react";
 
 import { getCompactBrandHeaderOptions } from "../../components/CompactBrandTitle";
@@ -18,6 +19,7 @@ import { HomeScreen } from "./HomeScreen";
 import { HomeHeader } from "./HomeHeader";
 import { useHomeListOptions } from "./home-list-options";
 import { buildHomeProjectScopes } from "./homeThreadList";
+import { useCardsFirstScreen } from "./use-cards-first-screen";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
 import { useThreadListActions } from "./useThreadListActions";
 
@@ -30,6 +32,7 @@ export function HomeRouteScreen() {
   const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const navigation = useNavigation();
+  const { cardsFirstScreenEnabled } = useCardsFirstScreen();
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -72,6 +75,18 @@ export function HomeRouteScreen() {
     setProjectSortOrder,
     setThreadSortOrder,
   } = useHomeListOptions(availableEnvironmentIds);
+  const homeHeaderOptions = useMemo<NativeStackNavigationOptions>(
+    () =>
+      cardsFirstScreenEnabled
+        ? {
+            ...getCompactBrandHeaderOptions(),
+            headerBackButtonDisplayMode: "default",
+            headerBackTitle: "卡片",
+            headerBackVisible: true,
+          }
+        : getCompactBrandHeaderOptions(),
+    [cardsFirstScreenEnabled],
+  );
   const selectedEnvironmentId = listOptions.selectedEnvironmentId;
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
   const projectFilterOptions = useMemo(
@@ -125,7 +140,7 @@ export function HomeRouteScreen() {
     >
       <>
         {/* Restore the compact title after the split branch blanks the detail header. */}
-        <NativeStackScreenOptions options={getCompactBrandHeaderOptions()} />
+        <NativeStackScreenOptions options={homeHeaderOptions} />
         <HomeHeader
           environments={environments}
           projects={projectFilterOptions}

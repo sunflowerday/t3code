@@ -11,6 +11,7 @@ import {
   RuntimeMode,
   ThreadId,
   type ModelSelection as ModelSelectionType,
+  type OrchestrationSessionStatus,
   type ProjectId as ProjectIdType,
   type ProviderInteractionMode as ProviderInteractionModeType,
   type RuntimeMode as RuntimeModeType,
@@ -50,6 +51,10 @@ export const QueuedThreadMessageSchema = Schema.Struct({
   // Present when the queued item creates a brand-new thread (pending task)
   // instead of appending a turn to an existing one.
   creation: Schema.optional(QueuedThreadCreationSchema),
+  // Set when the server explicitly rejected delivery: the message stays queued
+  // with this reason so the user can see why and act on it, rather than being
+  // silently dropped. Cleared whenever the payload is edited or re-enqueued.
+  failureReason: Schema.optional(Schema.String),
   createdAt: IsoDateTime,
 });
 
@@ -77,6 +82,7 @@ export interface QueuedThreadMessage {
   readonly runtimeMode?: RuntimeModeType;
   readonly interactionMode?: ProviderInteractionModeType;
   readonly creation?: QueuedThreadCreation;
+  readonly failureReason?: string;
   readonly createdAt: string;
 }
 
@@ -173,6 +179,68 @@ export function resolveThreadOutboxDeliveryAction(input: {
 }
 
 /**
+ * A `wait` is the one delivery decision with no follow-up of its own, and the
+ * states it waits on are read from a subscription that can park without
+ * surfacing an error (a shell stream whose resubscribe lost its transport
+ * stays `synchronizing` over a stale snapshot until the app is relaunched).
+ * Re-checking at this interval keeps a queued message from lying in the outbox
+ * forever when the transition it waited for never reaches this client.
+ */
+export const THREAD_OUTBOX_WAIT_RETRY_DELAY_MS = 15_000;
+
+export type ThreadOutboxSessionStatus = OrchestrationSessionStatus;
+
+export interface ThreadOutboxDrainEvaluation {
+  readonly deliveryAction: ThreadOutboxDeliveryAction;
+  /** Set only for `wait`: re-run the drain for this message after this delay. */
+  readonly waitRetryDelayMs: number | null;
+  readonly report: {
+    readonly deliveryAction: ThreadOutboxDeliveryAction;
+    readonly isCreation: boolean;
+    readonly threadExists: boolean;
+    readonly shellStatus: EnvironmentShellStatus;
+    readonly connectionState: string | null;
+    readonly threadSessionStatus: ThreadOutboxSessionStatus | null;
+  };
+}
+
+export function isThreadOutboxSessionBusy(
+  status: ThreadOutboxSessionStatus | null | undefined,
+): boolean {
+  return status === "running" || status === "starting";
+}
+
+export function resolveThreadOutboxDrainEvaluation(input: {
+  readonly isCreation: boolean;
+  readonly threadExists: boolean;
+  readonly shellStatus: EnvironmentShellStatus;
+  readonly environmentConnected: boolean;
+  readonly threadSessionStatus: ThreadOutboxSessionStatus | null;
+  readonly connectionState: string | null;
+}): ThreadOutboxDrainEvaluation {
+  const threadBusy = isThreadOutboxSessionBusy(input.threadSessionStatus);
+  const deliveryAction = resolveThreadOutboxDeliveryAction({
+    isCreation: input.isCreation,
+    threadExists: input.threadExists,
+    shellStatus: input.shellStatus,
+    environmentConnected: input.environmentConnected,
+    threadBusy,
+  });
+  return {
+    deliveryAction,
+    waitRetryDelayMs: deliveryAction === "wait" ? THREAD_OUTBOX_WAIT_RETRY_DELAY_MS : null,
+    report: {
+      deliveryAction,
+      isCreation: input.isCreation,
+      threadExists: input.threadExists,
+      shellStatus: input.shellStatus,
+      connectionState: input.connectionState,
+      threadSessionStatus: input.threadSessionStatus,
+    },
+  };
+}
+
+/**
  * A queued creation can only be dispatched once its payload would pass server
  * validation; incomplete payloads stay pending until the user edits them.
  */
@@ -209,7 +277,13 @@ export function shouldRetryThreadOutboxDelivery(error: unknown): boolean {
 }
 
 export type ThreadOutboxCommandStage = "settings-sync" | "start-turn";
-export type ThreadOutboxFailureAction = "retry" | "discard";
+/**
+ * `retry` keeps the message queued and re-attempts it on backoff (a transient
+ * transport blip); `fail` keeps it queued but stops auto-retrying and records
+ * the server's rejection so the user can see and act on it. A server-explicit
+ * rejection must never discard the message — the user's turn would vanish.
+ */
+export type ThreadOutboxFailureAction = "retry" | "fail";
 
 export function resolveThreadOutboxFailureAction(input: {
   readonly stage: ThreadOutboxCommandStage;
@@ -223,5 +297,5 @@ export function resolveThreadOutboxFailureAction(input: {
   ) {
     return "retry";
   }
-  return "discard";
+  return "fail";
 }
