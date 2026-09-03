@@ -571,7 +571,7 @@ describe("buildHomeThreadGroups", () => {
     expect(buildGroups(projects, threads, { projectGroupingMode: "separate" })).toHaveLength(2);
   });
 
-  it("default view shows only threads from the last 5 days", () => {
+  it("default view keeps every thread under Kuca's widened recency window", () => {
     const environmentId = EnvironmentId.make("environment-1");
     const project = makeProject({
       environmentId,
@@ -603,13 +603,21 @@ describe("buildHomeThreadGroups", () => {
     ];
 
     const group = buildGroups([project], threads)[0];
-    // Default view trims to recent threads...
-    expect(group?.recentThreads.map((thread) => thread.id)).toEqual(["recent-1", "recent-2"]);
-    // ...while full history stays available for the expanded view.
-    expect(group?.threads.map((thread) => thread.id)).toEqual(["recent-1", "recent-2", "old"]);
+    // Kuca widens the recency window to ~100 years, so the default view keeps
+    // the full history instead of trimming to upstream's 5-day window.
+    expect(group?.recentThreads.map((thread) => thread.id)).toEqual([
+      "recent-1",
+      "recent-2",
+      "old",
+    ]);
+    expect(group?.threads.map((thread) => thread.id)).toEqual([
+      "recent-1",
+      "recent-2",
+      "old",
+    ]);
   });
 
-  it("falls back to the most recent 3 threads when none are within 5 days", () => {
+  it("keeps the full history when every thread is older than upstream's 5-day window", () => {
     const environmentId = EnvironmentId.make("environment-1");
     const project = makeProject({
       environmentId,
@@ -628,10 +636,14 @@ describe("buildHomeThreadGroups", () => {
     );
 
     const group = buildGroups([project], threads)[0];
+    // All five threads sit inside Kuca's widened window, so the default view
+    // keeps the full history and upstream's 3-thread fallback never triggers.
     expect(group?.recentThreads.map((thread) => thread.id)).toEqual([
       "thread-4",
       "thread-3",
       "thread-2",
+      "thread-1",
+      "thread-0",
     ]);
     expect(group?.threads).toHaveLength(5);
   });
