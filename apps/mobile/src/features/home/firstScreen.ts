@@ -34,20 +34,36 @@ export function resolveFirstScreenRoute(input: {
     : { name: "Home" };
 }
 
+export type FirstScreenDecisionReason =
+  | "untouched_home"
+  | "restored_thread"
+  | "preferences_not_loaded"
+  | "cards_first_disabled"
+  | "inbound_launch_target"
+  | "inbound_thread_only_stack"
+  | "not_a_launch_stack";
+
+export type FirstScreenDecision = {
+  readonly decision: "apply" | "skip";
+  readonly reason: FirstScreenDecisionReason;
+};
+
 /**
- * True when this launch already has an explicit destination: a notification
- * tap, an automation/open-thread URL, or a launcher shortcut. Last-thread
- * restore is not inbound — it just pushes Thread onto Home after launch.
+ * Device-pullable snapshot of one FirstScreenGate effect run. Shape is the
+ * contract the host greps for in `Documents/automation/gate-*.json`.
  */
-function isInboundLaunchStack(input: {
-  readonly inboundLaunchTarget: boolean;
+export type FirstScreenGateRecord = {
+  readonly at: string;
   readonly routeNames: ReadonlyArray<string>;
-}): boolean {
-  if (input.inboundLaunchTarget) return true;
-  // Linking initial state lands on Thread as the only route. A restore always
-  // keeps Home underneath because it navigates after the default launch stack.
-  return input.routeNames.length === 1 && input.routeNames[0] === "Thread";
-}
+  readonly index: number;
+  readonly focusedRouteName: string | null;
+  readonly preferencesLoaded: boolean;
+  readonly cardsFirstScreenEnabled: boolean;
+  readonly inboundLaunchTarget: boolean;
+  readonly decision: "apply" | "skip";
+  readonly reason: FirstScreenDecisionReason;
+  readonly willDispatch: boolean;
+};
 
 function isRestoredThreadLaunchStack(routeNames: ReadonlyArray<string>): boolean {
   return (
@@ -55,6 +71,41 @@ function isRestoredThreadLaunchStack(routeNames: ReadonlyArray<string>): boolean
     ((routeNames[0] === "Home" && routeNames[1] === "Thread") ||
       (routeNames[0] === "Web" && routeNames[1] === "Thread"))
   );
+}
+
+/**
+ * Same inputs as `shouldApplyFirstScreenRoute`, with a reason the device log
+ * can print. Order matches the boolean: preferences and the cards target
+ * first, then inbound marks, then the launch-stack shapes.
+ */
+export function describeFirstScreenDecision(input: {
+  readonly route: FirstScreenRoute;
+  readonly preferencesLoaded: boolean;
+  readonly routeNames: ReadonlyArray<string>;
+  readonly index: number;
+  readonly inboundLaunchTarget?: boolean;
+}): FirstScreenDecision {
+  if (!input.preferencesLoaded) {
+    return { decision: "skip", reason: "preferences_not_loaded" };
+  }
+  if (input.route.name !== "Web") {
+    return { decision: "skip", reason: "cards_first_disabled" };
+  }
+  if (input.inboundLaunchTarget === true) {
+    return { decision: "skip", reason: "inbound_launch_target" };
+  }
+  // Linking initial state lands on Thread as the only route. A restore always
+  // keeps Home underneath because it navigates after the default launch stack.
+  if (input.routeNames.length === 1 && input.routeNames[0] === "Thread") {
+    return { decision: "skip", reason: "inbound_thread_only_stack" };
+  }
+  if (input.index === 0 && input.routeNames.length === 1 && input.routeNames[0] === "Home") {
+    return { decision: "apply", reason: "untouched_home" };
+  }
+  if (isRestoredThreadLaunchStack(input.routeNames)) {
+    return { decision: "apply", reason: "restored_thread" };
+  }
+  return { decision: "skip", reason: "not_a_launch_stack" };
 }
 
 /**
@@ -74,19 +125,39 @@ export function shouldApplyFirstScreenRoute(input: {
   readonly index: number;
   readonly inboundLaunchTarget?: boolean;
 }): boolean {
-  if (!input.preferencesLoaded || input.route.name !== "Web") return false;
-  if (
-    isInboundLaunchStack({
-      inboundLaunchTarget: input.inboundLaunchTarget === true,
-      routeNames: input.routeNames,
-    })
-  ) {
-    return false;
-  }
-  if (input.index === 0 && input.routeNames.length === 1 && input.routeNames[0] === "Home") {
-    return true;
-  }
-  return isRestoredThreadLaunchStack(input.routeNames);
+  return describeFirstScreenDecision(input).decision === "apply";
+}
+
+export function buildFirstScreenGateRecord(input: {
+  readonly at: string;
+  readonly routeNames: ReadonlyArray<string>;
+  readonly index: number;
+  readonly preferencesLoaded: boolean;
+  readonly cardsFirstScreenEnabled: boolean;
+  readonly inboundLaunchTarget: boolean;
+}): FirstScreenGateRecord {
+  const route = resolveFirstScreenRoute({
+    cardsFirstScreenEnabled: input.cardsFirstScreenEnabled,
+  });
+  const described = describeFirstScreenDecision({
+    inboundLaunchTarget: input.inboundLaunchTarget,
+    index: input.index,
+    preferencesLoaded: input.preferencesLoaded,
+    route,
+    routeNames: input.routeNames,
+  });
+  return {
+    at: input.at,
+    cardsFirstScreenEnabled: input.cardsFirstScreenEnabled,
+    decision: described.decision,
+    focusedRouteName: input.routeNames[input.index] ?? null,
+    inboundLaunchTarget: input.inboundLaunchTarget,
+    index: input.index,
+    preferencesLoaded: input.preferencesLoaded,
+    reason: described.reason,
+    routeNames: input.routeNames,
+    willDispatch: described.decision === "apply",
+  };
 }
 
 /** True for the stream itself, with or without a query string; false for a single card. */
