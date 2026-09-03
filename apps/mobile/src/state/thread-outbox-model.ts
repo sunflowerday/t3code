@@ -51,6 +51,10 @@ export const QueuedThreadMessageSchema = Schema.Struct({
   // Present when the queued item creates a brand-new thread (pending task)
   // instead of appending a turn to an existing one.
   creation: Schema.optional(QueuedThreadCreationSchema),
+  // Set when the server explicitly rejected delivery: the message stays queued
+  // with this reason so the user can see why and act on it, rather than being
+  // silently dropped. Cleared whenever the payload is edited or re-enqueued.
+  failureReason: Schema.optional(Schema.String),
   createdAt: IsoDateTime,
 });
 
@@ -78,6 +82,7 @@ export interface QueuedThreadMessage {
   readonly runtimeMode?: RuntimeModeType;
   readonly interactionMode?: ProviderInteractionModeType;
   readonly creation?: QueuedThreadCreation;
+  readonly failureReason?: string;
   readonly createdAt: string;
 }
 
@@ -272,7 +277,13 @@ export function shouldRetryThreadOutboxDelivery(error: unknown): boolean {
 }
 
 export type ThreadOutboxCommandStage = "settings-sync" | "start-turn";
-export type ThreadOutboxFailureAction = "retry" | "discard";
+/**
+ * `retry` keeps the message queued and re-attempts it on backoff (a transient
+ * transport blip); `fail` keeps it queued but stops auto-retrying and records
+ * the server's rejection so the user can see and act on it. A server-explicit
+ * rejection must never discard the message — the user's turn would vanish.
+ */
+export type ThreadOutboxFailureAction = "retry" | "fail";
 
 export function resolveThreadOutboxFailureAction(input: {
   readonly stage: ThreadOutboxCommandStage;
@@ -286,5 +297,5 @@ export function resolveThreadOutboxFailureAction(input: {
   ) {
     return "retry";
   }
-  return "discard";
+  return "fail";
 }
