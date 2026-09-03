@@ -9,14 +9,14 @@ import { useCardsFirstScreen } from "./use-cards-first-screen";
 /**
  * Hands the launch stack over to the card stream when the device wants cards
  * first. Mounted from `RootStackLayout`, so it sees every root state change.
- * Reset, not replace: Web is registered as a fullScreenModal, and replacing
- * the root with a modal screen does not reliably become the focused route.
- * Reset makes Web the only screen, which the native stack treats as a push.
+ * Reset target is `CardsHome`, a regular (non-modal) screen. Resetting the
+ * root to modal `Web` is a no-op on the native stack: a real-device dispatch
+ * left JS focused on Home. Single-card and gov-deck pages still use `Web`.
  *
  * A notification tap, automation link, or shortcut marks inbound and is left
  * alone. An automatic last-thread restore just pushes Thread onto Home (or
- * onto Web after cards already took over) without that mark, and is reset
- * back to the card stream — see `shouldApplyFirstScreenRoute`.
+ * onto CardsHome after cards already took over) without that mark, and is
+ * reset back to the card stream — see `shouldApplyFirstScreenRoute`.
  */
 export function FirstScreenGate(props: { readonly state: NavigationState }) {
   const navigation = useNavigation();

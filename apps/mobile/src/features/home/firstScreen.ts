@@ -9,8 +9,11 @@
 /** Contract with the K3a lane: the web page that renders the card stream. */
 export const PHONE_CARDS_PATH = "/phone-cards";
 
+/** Regular (non-modal) root for the card stream. Distinct from modal `Web`. */
+export const CARDS_HOME_ROUTE_NAME = "CardsHome";
+
 export type FirstScreenRoute =
-  | { readonly name: "Web"; readonly params: { readonly path: string } }
+  | { readonly name: "CardsHome"; readonly params: { readonly path: string } }
   | { readonly name: "Home"; readonly params?: undefined };
 
 /**
@@ -30,7 +33,7 @@ export function resolveFirstScreenRoute(input: {
   readonly cardsFirstScreenEnabled: boolean;
 }): FirstScreenRoute {
   return input.cardsFirstScreenEnabled
-    ? { name: "Web", params: { path: PHONE_CARDS_PATH } }
+    ? { name: CARDS_HOME_ROUTE_NAME, params: { path: PHONE_CARDS_PATH } }
     : { name: "Home" };
 }
 
@@ -68,8 +71,10 @@ export type FirstScreenGateRecord = {
 function isRestoredThreadLaunchStack(routeNames: ReadonlyArray<string>): boolean {
   return (
     routeNames.length === 2 &&
-    ((routeNames[0] === "Home" && routeNames[1] === "Thread") ||
-      (routeNames[0] === "Web" && routeNames[1] === "Thread"))
+    routeNames[1] === "Thread" &&
+    (routeNames[0] === "Home" ||
+      routeNames[0] === "Web" ||
+      routeNames[0] === CARDS_HOME_ROUTE_NAME)
   );
 }
 
@@ -88,7 +93,7 @@ export function describeFirstScreenDecision(input: {
   if (!input.preferencesLoaded) {
     return { decision: "skip", reason: "preferences_not_loaded" };
   }
-  if (input.route.name !== "Web") {
+  if (input.route.name !== CARDS_HOME_ROUTE_NAME) {
     return { decision: "skip", reason: "cards_first_disabled" };
   }
   if (input.inboundLaunchTarget === true) {
@@ -114,9 +119,9 @@ export function describeFirstScreenDecision(input: {
  * asks for cards, and the navigator is still a launch stack. Launch stacks are
  * the bare `initialRouteName` Home, or that Home with an automatic last-thread
  * restore pushed on top (or the same restore arriving after cards already
- * took over). A notification tap, automation link, or shortcut sets
- * `inboundLaunchTarget`; a cold-start thread URL is already `[Thread]` with
- * no Home underneath. Those stay where they landed.
+ * took over as `CardsHome`). A notification tap, automation link, or shortcut
+ * sets `inboundLaunchTarget`; a cold-start thread URL is already `[Thread]`
+ * with no Home underneath. Those stay where they landed.
  */
 export function shouldApplyFirstScreenRoute(input: {
   readonly route: FirstScreenRoute;

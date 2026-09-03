@@ -41,7 +41,7 @@ describe("resolveCardsFirstScreenEnabled", () => {
 describe("resolveFirstScreenRoute", () => {
   it("opens on the card stream when the preference is on", () => {
     expect(resolveFirstScreenRoute({ cardsFirstScreenEnabled: true })).toEqual({
-      name: "Web",
+      name: "CardsHome",
       params: { path: PHONE_CARDS_PATH },
     });
   });
@@ -104,6 +104,14 @@ describe("shouldApplyFirstScreenRoute", () => {
       shouldApplyFirstScreenRoute({
         route: cards,
         preferencesLoaded: true,
+        routeNames: ["CardsHome", "Thread"],
+        index: 1,
+      }),
+    ).toBe(true);
+    expect(
+      shouldApplyFirstScreenRoute({
+        route: cards,
+        preferencesLoaded: true,
         routeNames: ["Web", "Thread"],
         index: 1,
       }),
@@ -153,9 +161,33 @@ describe("shouldApplyFirstScreenRoute", () => {
         index: 2,
       }),
     ).toBe(false);
+    expect(
+      shouldApplyFirstScreenRoute({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["CardsHome", "Home"],
+        index: 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldApplyFirstScreenRoute({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["CardsHome", "Home", "Thread"],
+        index: 2,
+      }),
+    ).toBe(false);
   });
 
   it("fires once: the stack it produced is not a launch stack", () => {
+    expect(
+      shouldApplyFirstScreenRoute({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["CardsHome"],
+        index: 0,
+      }),
+    ).toBe(false);
     expect(
       shouldApplyFirstScreenRoute({
         route: cards,
@@ -213,6 +245,14 @@ describe("describeFirstScreenDecision", () => {
         index: 0,
       }),
     ).toEqual({ decision: "skip", reason: "not_a_launch_stack" });
+    expect(
+      describeFirstScreenDecision({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["CardsHome"],
+        index: 0,
+      }),
+    ).toEqual({ decision: "skip", reason: "not_a_launch_stack" });
   });
 
   it("names the two apply shapes", () => {
@@ -229,6 +269,14 @@ describe("describeFirstScreenDecision", () => {
         route: cards,
         preferencesLoaded: true,
         routeNames: ["Home", "Thread"],
+        index: 1,
+      }),
+    ).toEqual({ decision: "apply", reason: "restored_thread" });
+    expect(
+      describeFirstScreenDecision({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["CardsHome", "Thread"],
         index: 1,
       }),
     ).toEqual({ decision: "apply", reason: "restored_thread" });
