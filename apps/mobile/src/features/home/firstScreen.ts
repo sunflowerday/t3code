@@ -35,20 +35,58 @@ export function resolveFirstScreenRoute(input: {
 }
 
 /**
- * The gate may only rewrite a stack nobody has touched: preferences settled so
- * a stored opt-out cannot be overwritten by the on-default, the route actually
- * asks for cards, and the navigator still sits on the bare `initialRouteName`
- * launch state. A cold-start deep link or notification tap has already pushed
- * or replaced routes, so it fails this check and stays where it landed.
+ * True when this launch already has an explicit destination: a notification
+ * tap, an automation/open-thread URL, or a launcher shortcut. Last-thread
+ * restore is not inbound — it just pushes Thread onto Home after launch.
+ */
+function isInboundLaunchStack(input: {
+  readonly inboundLaunchTarget: boolean;
+  readonly routeNames: ReadonlyArray<string>;
+}): boolean {
+  if (input.inboundLaunchTarget) return true;
+  // Linking initial state lands on Thread as the only route. A restore always
+  // keeps Home underneath because it navigates after the default launch stack.
+  return input.routeNames.length === 1 && input.routeNames[0] === "Thread";
+}
+
+function isRestoredThreadLaunchStack(routeNames: ReadonlyArray<string>): boolean {
+  return (
+    routeNames.length === 2 &&
+    ((routeNames[0] === "Home" && routeNames[1] === "Thread") ||
+      (routeNames[0] === "Web" && routeNames[1] === "Thread"))
+  );
+}
+
+/**
+ * The gate may rewrite a stack nobody asked to open: preferences settled so a
+ * stored opt-out cannot be overwritten by the on-default, the route actually
+ * asks for cards, and the navigator is still a launch stack. Launch stacks are
+ * the bare `initialRouteName` Home, or that Home with an automatic last-thread
+ * restore pushed on top (or the same restore arriving after cards already
+ * took over). A notification tap, automation link, or shortcut sets
+ * `inboundLaunchTarget`; a cold-start thread URL is already `[Thread]` with
+ * no Home underneath. Those stay where they landed.
  */
 export function shouldApplyFirstScreenRoute(input: {
   readonly route: FirstScreenRoute;
   readonly preferencesLoaded: boolean;
   readonly routeNames: ReadonlyArray<string>;
   readonly index: number;
+  readonly inboundLaunchTarget?: boolean;
 }): boolean {
   if (!input.preferencesLoaded || input.route.name !== "Web") return false;
-  return input.index === 0 && input.routeNames.length === 1 && input.routeNames[0] === "Home";
+  if (
+    isInboundLaunchStack({
+      inboundLaunchTarget: input.inboundLaunchTarget === true,
+      routeNames: input.routeNames,
+    })
+  ) {
+    return false;
+  }
+  if (input.index === 0 && input.routeNames.length === 1 && input.routeNames[0] === "Home") {
+    return true;
+  }
+  return isRestoredThreadLaunchStack(input.routeNames);
 }
 
 /** True for the stream itself, with or without a query string; false for a single card. */

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
   PHONE_CARDS_PATH,
@@ -7,6 +7,11 @@ import {
   resolveFirstScreenRoute,
   shouldApplyFirstScreenRoute,
 } from "./firstScreen";
+import {
+  hasInboundLaunchTarget,
+  markInboundLaunchTarget,
+  resetInboundLaunchTarget,
+} from "./firstScreenLaunch";
 
 describe("resolveCardsFirstScreenEnabled", () => {
   it("defaults on when the device has never chosen", () => {
@@ -81,9 +86,32 @@ describe("shouldApplyFirstScreenRoute", () => {
     ).toBe(false);
   });
 
+  it("takes over Home after an automatic last-thread restore pushed Thread", () => {
+    expect(
+      shouldApplyFirstScreenRoute({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Home", "Thread"],
+        index: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("reclaims cards when a late restore pushes Thread onto the card stream", () => {
+    expect(
+      shouldApplyFirstScreenRoute({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Web", "Thread"],
+        index: 1,
+      }),
+    ).toBe(true);
+  });
+
   it("never redirects a deep link or notification that already navigated", () => {
     expect(
       shouldApplyFirstScreenRoute({
+        inboundLaunchTarget: true,
         route: cards,
         preferencesLoaded: true,
         routeNames: ["Home", "Thread"],
@@ -92,10 +120,35 @@ describe("shouldApplyFirstScreenRoute", () => {
     ).toBe(false);
     expect(
       shouldApplyFirstScreenRoute({
+        inboundLaunchTarget: true,
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Web", "Thread"],
+        index: 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldApplyFirstScreenRoute({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Thread"],
+        index: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldApplyFirstScreenRoute({
         route: cards,
         preferencesLoaded: true,
         routeNames: ["Web", "Home"],
         index: 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldApplyFirstScreenRoute({
+        route: cards,
+        preferencesLoaded: true,
+        routeNames: ["Web", "Home", "Thread"],
+        index: 2,
       }),
     ).toBe(false);
   });
@@ -122,5 +175,19 @@ describe("isPhoneCardsLandingPath", () => {
     expect(isPhoneCardsLandingPath("/phone-cards/thread-1")).toBe(false);
     expect(isPhoneCardsLandingPath("/gov/deck/harvest-deck.html")).toBe(false);
     expect(isPhoneCardsLandingPath("/")).toBe(false);
+  });
+});
+
+describe("inbound launch target", () => {
+  afterEach(() => {
+    resetInboundLaunchTarget();
+  });
+
+  it("starts unset and is sticky once marked", () => {
+    expect(hasInboundLaunchTarget()).toBe(false);
+    markInboundLaunchTarget();
+    expect(hasInboundLaunchTarget()).toBe(true);
+    markInboundLaunchTarget();
+    expect(hasInboundLaunchTarget()).toBe(true);
   });
 });
