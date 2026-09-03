@@ -36,7 +36,9 @@ import { GitOverviewSheet } from "./features/threads/git/GitOverviewSheet";
 import { ThreadRouteScreen } from "./features/threads/ThreadRouteScreen";
 import { ConnectionsRouteScreen } from "./features/connection/ConnectionsRouteScreen";
 import { ConnectionsNewRouteScreen } from "./features/connection/ConnectionsNewRouteScreen";
+import { CardsHomeRouteScreen } from "./features/home/CardsHomeRouteScreen";
 import { FirstScreenGate } from "./features/home/FirstScreenGate";
+import { PHONE_CARDS_PATH } from "./features/home/firstScreen";
 import { HomeRouteScreen } from "./features/home/HomeRouteScreen";
 import { PhoneWebRouteScreen } from "./features/web/PhoneWebRouteScreen";
 import { AddProjectDestinationRoute } from "./features/projects/AddProjectDestinationRoute";
@@ -443,6 +445,16 @@ export const RootStack = createNativeStackNavigator({
         contentStyle: { backgroundColor: "transparent" },
         headerBackVisible: false,
         ...getCompactBrandHeaderOptions(),
+      },
+    }),
+    CardsHome: createNativeStackScreen({
+      screen: CardsHomeRouteScreen,
+      linking: "phone-cards",
+      initialParams: { path: PHONE_CARDS_PATH },
+      options: {
+        ...SOLID_HEADER_OPTIONS,
+        headerBackVisible: false,
+        title: "卡片",
       },
     }),
     Web: createNativeStackScreen({
