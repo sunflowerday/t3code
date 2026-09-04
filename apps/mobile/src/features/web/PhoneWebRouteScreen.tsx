@@ -11,32 +11,25 @@ import { useEnvironments } from "../../state/environments";
 import { usePreparedConnection } from "../../state/session";
 import { automationNote } from "../automation/automationLink";
 
-const ORIGIN = "https://phone.kuca.app";
-const ERR = "无法打开 phone.kuca.app，请检查网络后重试。";
+import {
+  classifyPhoneEntryFault,
+  describePhoneEntryFault,
+  isPhoneEntryOrigin,
+  PHONE_ENTRY_ORIGIN as ORIGIN,
+  resolvePhoneEntryPath,
+} from "./phoneEntry";
+
 const SESSION_PROBE =
   '(async()=>{try{const r=await fetch("/api/auth/session",{credentials:"same-origin"});let a=false;try{a=(await r.json()).authenticated===true;}catch{}window.ReactNativeWebView.postMessage(JSON.stringify({authenticated:r.status===401?false:a}));}catch{window.ReactNativeWebView.postMessage("{}");}})();true;';
 
 type Env = { environmentId: EnvironmentId; displayUrl?: string | null };
 
 export function shouldLoadInPhoneWebView(url: string): boolean {
-  try {
-    return new URL(url).origin === ORIGIN;
-  } catch {
-    return false;
-  }
+  return isPhoneEntryOrigin(url);
 }
 
 export function resolvePhoneWebPath(path: string | string[] | undefined): string {
-  const raw = Array.isArray(path) ? path[0] : path;
-  if (typeof raw !== "string" || raw.length === 0) return "/";
-  const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  if (withSlash.startsWith("//") || withSlash.includes("://")) return "/";
-  try {
-    const url = new URL(withSlash, ORIGIN);
-    return url.origin === ORIGIN ? `${url.pathname}${url.search}` : "/";
-  } catch {
-    return "/";
-  }
+  return resolvePhoneEntryPath(path);
 }
 
 export function phoneCardsPath(threadId: string): string {
@@ -142,11 +135,11 @@ export function PhoneWebRouteScreen({
         .then(setUri)
         .catch((cause: unknown) => {
           automationNote("web-mint-failed", { uri, cause: String(cause) });
-          setError(ERR);
+          setError(describePhoneEntryFault(classifyPhoneEntryFault(null)));
         });
       return;
     }
-    if (isReady) setError(ERR);
+    if (isReady) setError(describePhoneEntryFault("not-paired"));
   }
   const openThreadList = useCallback(() => {
     navigation.navigate("Home", undefined, { pop: true });
@@ -188,7 +181,15 @@ export function PhoneWebRouteScreen({
           onMessage={onMessage}
           onError={(event) => {
             automationNote("web-error", { uri, nativeEvent: event.nativeEvent });
-            setError(ERR);
+            // No response at all: no route, DNS, captive portal, sleeping Mac.
+            setError(describePhoneEntryFault(classifyPhoneEntryFault(null)));
+          }}
+          onHttpError={(event) => {
+            const status = event.nativeEvent.statusCode;
+            automationNote("web-http-error", { uri, status });
+            // A tunnel with no Kuca behind it answers 502 here. That is the case owner hit
+            // on 2026-09-05, and it used to read as 「请检查网络」.
+            setError(describePhoneEntryFault(classifyPhoneEntryFault(status)));
           }}
           onLoadEnd={(event) =>
             automationNote("web-load-end", { uri, nativeEvent: event.nativeEvent })
