@@ -457,7 +457,7 @@ describe("thread outbox", () => {
     registry.dispose();
   });
 
-  it("only removes a missing-thread message after shell synchronization is live", () => {
+  it("only fails a missing-thread message after shell synchronization is live", () => {
     expect(
       resolveThreadOutboxDeliveryAction({
         isCreation: false,
@@ -475,7 +475,7 @@ describe("thread outbox", () => {
         environmentConnected: true,
         threadBusy: false,
       }),
-    ).toBe("remove");
+    ).toBe("fail");
     expect(
       resolveThreadOutboxDeliveryAction({
         isCreation: false,

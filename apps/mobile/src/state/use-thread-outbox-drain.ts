@@ -32,7 +32,9 @@ import { describeCauseMessage, presentUserFacingError } from "../lib/userFacingE
 import {
   isQueuedThreadCreationSendable,
   isThreadOutboxSessionBusy,
+  MISSING_THREAD_OUTBOX_FAILURE_REASON,
   modelSelectionsEqual,
+  parkUndeliverableThreadOutboxMessage,
   resolveThreadOutboxDrainEvaluation,
   resolveThreadOutboxFailureAction,
   resolveQueuedThreadSettings,
@@ -431,6 +433,24 @@ export function useThreadOutboxDrain(): void {
             return "retry" as const;
           },
         );
+      const parkQueuedMessage = (reason: string): Promise<ThreadOutboxDeliveryOutcome> =>
+        parkUndeliverableThreadOutboxMessage(nextQueuedMessage, reason, {
+          update: updateThreadOutboxMessage,
+          surfaceError: setPendingConnectionError,
+        }).then(
+          () => "failed" as const,
+          (error) => {
+            // The reason is already on screen; only the durable note failed, so
+            // the message stays queued and the next pass re-parks it.
+            console.warn("[thread-outbox] failed to record why a message was not delivered", {
+              environmentId: nextQueuedMessage.environmentId,
+              threadId: nextQueuedMessage.threadId,
+              messageId: nextQueuedMessage.messageId,
+              error,
+            });
+            return "failed" as const;
+          },
+        );
       // Enqueues publish optimistically before their durable write settles.
       // Confirm the write landed (and the message wasn't rolled back) before
       // sending, so a failed write can never chase an already-delivered turn.
@@ -464,15 +484,23 @@ export function useThreadOutboxDrain(): void {
             armWaitReEvaluation(nextQueuedMessage.messageId, THREAD_OUTBOX_WAIT_RETRY_DELAY_MS);
             return "delivered";
           }
-          return deliveryAction === "remove"
-            ? removeQueuedMessage("[thread-outbox] failed to remove message for a missing thread")
-            : creation !== undefined
-              ? creationProjectCwd !== null
-                ? sendQueuedCreation(nextQueuedMessage, creation, creationProjectCwd)
-                : removeQueuedMessage("[thread-outbox] dropped pending task for a missing project")
-              : thread !== undefined
-                ? sendQueuedMessage(nextQueuedMessage, thread)
-                : Promise.resolve<ThreadOutboxDeliveryOutcome>("retry");
+          return deliveryAction === "fail"
+            ? parkQueuedMessage(MISSING_THREAD_OUTBOX_FAILURE_REASON)
+            : deliveryAction === "remove"
+              ? // Only reachable for a creation whose thread already exists: the
+                // creation command went through and this entry is leftover.
+                removeQueuedMessage(
+                  "[thread-outbox] failed to remove an already-created pending task",
+                )
+              : creation !== undefined
+                ? creationProjectCwd !== null
+                  ? sendQueuedCreation(nextQueuedMessage, creation, creationProjectCwd)
+                  : removeQueuedMessage(
+                      "[thread-outbox] dropped pending task for a missing project",
+                    )
+                : thread !== undefined
+                  ? sendQueuedMessage(nextQueuedMessage, thread)
+                  : Promise.resolve<ThreadOutboxDeliveryOutcome>("retry");
         },
       );
       void delivery
