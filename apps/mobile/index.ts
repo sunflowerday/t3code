@@ -3,11 +3,16 @@ import "react-native-gesture-handler";
 import { LogBox } from "react-native";
 import { featureFlags } from "react-native-screens";
 
-import { installFatalErrorHandler, throwIfFatalProbeArmed } from "./src/fatal/fatalError";
+import {
+  installFatalErrorHandler,
+  RELEASE_BUILD_STAMP,
+  throwIfFatalProbeArmed,
+} from "./src/fatal/fatalError";
 import App from "./src/App";
 
 installFatalErrorHandler();
 void throwIfFatalProbeArmed();
+console.log("[kuca-build]", RELEASE_BUILD_STAMP);
 
 // Required for react-native-screens' iOS FormSheet sizing fix when a nested
 // native stack is rendered inside a non-fitToContents formSheet.
