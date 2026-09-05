@@ -14,6 +14,11 @@ import { FatalErrorHost } from "./fatal/FatalErrorHost";
 import { clearFatalError } from "./fatal/fatalError";
 import { CloudAuthProvider } from "./features/cloud/CloudAuthProvider";
 import { prepareNativeShowcaseCapture } from "./features/showcase/nativeShowcaseScene";
+import {
+  automationNavigationRef,
+  installAutomationLink,
+  isAutomationUrl,
+} from "./features/automation/automationLink";
 import { IncomingShareProvider } from "./features/sharing/IncomingShareProvider";
 import {
   AppearancePreferencesProvider,
@@ -43,11 +48,20 @@ const appLinking = {
   // to the NotFound wildcard route on every dev launch.
   // expo-sharing uses a private lifecycle URL only to wake the app. The
   // persisted share inbox below owns navigation once the payload is durable.
+  // Kuca micro-patch: host automation links are handled by installAutomationLink,
+  // never by navigation (they would otherwise land on the NotFound route).
   filter: (url: string) =>
-    !url.includes("expo-development-client") && !url.includes("://expo-sharing"),
+    !url.includes("expo-development-client") &&
+    !url.includes("://expo-sharing") &&
+    !isAutomationUrl(url),
 };
 
 const Navigation = createStaticNavigation(RootStack);
+
+function AutomationLinkHost() {
+  useEffect(() => installAutomationLink(), []);
+  return null;
+}
 
 function SplashScreenCoordinator() {
   const { isReady } = useAppearancePreferences();
@@ -69,6 +83,7 @@ export default function App() {
       <CloudAuthProvider>
         <AppearancePreferencesProvider>
           <SplashScreenCoordinator />
+          <AutomationLinkHost />
           <GestureHandlerRootView className="flex-1">
             <KeyboardProvider statusBarTranslucent>
               <SafeAreaProvider>
@@ -87,6 +102,7 @@ export default function App() {
                   <IncomingShareProvider>
                     <Navigation
                       key={appGeneration}
+                      ref={automationNavigationRef}
                       linking={appLinking}
                       theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
                     />

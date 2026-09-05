@@ -30,6 +30,13 @@ export interface Preferences {
    * see `resolveThreadListV2Enabled`.
    */
   readonly threadListV2Enabled?: boolean;
+  /**
+   * Whether the app opens on the /phone-cards stream with the thread list one
+   * tap away, instead of opening on the thread list directly. Undefined means
+   * the user has never chosen, which resolves to on — see
+   * `resolveCardsFirstScreenEnabled`.
+   */
+  readonly cardsFirstScreenEnabled?: boolean;
 }
 
 export class MobilePreferencesLoadError extends Schema.TaggedErrorClass<MobilePreferencesLoadError>()(
@@ -81,6 +88,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     collapsedProjectGroups?: readonly string[];
     projectGroupingEnabled?: boolean;
     threadListV2Enabled?: boolean;
+    cardsFirstScreenEnabled?: boolean;
   } = {};
 
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
@@ -112,6 +120,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (typeof parsed.threadListV2Enabled === "boolean") {
     preferences.threadListV2Enabled = parsed.threadListV2Enabled;
+  }
+  if (typeof parsed.cardsFirstScreenEnabled === "boolean") {
+    preferences.cardsFirstScreenEnabled = parsed.cardsFirstScreenEnabled;
   }
   return preferences;
 }

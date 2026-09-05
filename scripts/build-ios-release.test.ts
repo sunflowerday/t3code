@@ -44,6 +44,7 @@ it("freezes the local Release xcodebuild argv", () => {
   assert.match(line, / -derivedDataPath .*\/.cache\/kuca-ios-dd /);
   assert.match(line, / DEVELOPMENT_TEAM=B537AN89U9 /);
   assert.match(line, / CODE_SIGN_STYLE=Automatic /);
+  assert.match(line, / COMPILATION_CACHE_ENABLE_CACHING=NO /);
   assert.ok(line.endsWith(" build"));
   assert.ok(!line.includes("/tmp/"));
 });
