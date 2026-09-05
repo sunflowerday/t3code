@@ -10,6 +10,9 @@ vi.mock("../../state/environments", () => ({
 }));
 vi.mock("../../state/session", () => ({ usePreparedConnection: () => ({ _tag: "None" }) }));
 vi.mock("../../components/AppText", () => ({ AppText: "T" }));
+// automationLink reaches the Expo native modules and the whole state layer,
+// none of which these pure helpers touch.
+vi.mock("../automation/automationLink", () => ({ automationNote: vi.fn() }));
 
 import {
   decidePhoneWebAction,
