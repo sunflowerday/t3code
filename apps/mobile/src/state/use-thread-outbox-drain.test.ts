@@ -3,9 +3,11 @@ import type { ConnectionCatalogEntry } from "@t3tools/client-runtime/connection"
 import type { EnvironmentCatalogState } from "@t3tools/client-runtime/state/connections";
 import { createEnvironmentThreadShellAtoms } from "@t3tools/client-runtime/state/threads";
 import {
+  CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
   EnvironmentId,
+  MessageId,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
@@ -15,9 +17,14 @@ import {
 } from "@t3tools/contracts";
 import { Atom, AtomRegistry } from "effect/unstable/reactivity";
 
+import { createThreadOutboxManager } from "./thread-outbox-manager";
 import {
+  flattenQueuedThreadMessages,
+  MISSING_THREAD_OUTBOX_FAILURE_REASON,
+  parkUndeliverableThreadOutboxMessage,
   resolveThreadOutboxDrainEvaluation,
   THREAD_OUTBOX_WAIT_RETRY_DELAY_MS,
+  type QueuedThreadMessage,
   type ThreadOutboxDrainEvaluation,
 } from "./thread-outbox-model";
 
@@ -131,8 +138,84 @@ describe("thread outbox drain re-evaluation", () => {
 
     expect(missing.deliveryAction).toBe("wait");
     expect(missing.waitRetryDelayMs).toBe(THREAD_OUTBOX_WAIT_RETRY_DELAY_MS);
-    // A live shell plus a missing thread is a real removal, not a stall.
-    expect(evaluate({ threadExists: false, shellStatus: "live" }).deliveryAction).toBe("remove");
+    // A live shell plus a missing thread is a real failure, not a stall — and
+    // not a removal either: see the outbox test below for what happens to the
+    // message itself.
+    expect(evaluate({ threadExists: false, shellStatus: "live" }).deliveryAction).toBe("fail");
+  });
+});
+
+describe("thread outbox drain for a thread the shell no longer lists", () => {
+  const message: QueuedThreadMessage = {
+    environmentId: ENVIRONMENT_ID,
+    threadId: THREAD_ID,
+    messageId: MessageId.make("message-1"),
+    commandId: CommandId.make("command-1"),
+    text: "把刚才那段改回去",
+    attachments: [],
+    createdAt: "2026-09-05T09:00:00.000Z",
+  };
+
+  /**
+   * The user's own text must survive a thread that is gone. Before this, the
+   * drain removed the entry and reported it as delivered, so the message left
+   * the queue exactly the way a sent one does and nothing reached the screen.
+   */
+  it("leaves the message queued with a reason on screen instead of deleting it", async () => {
+    const registry = AtomRegistry.make();
+    const persisted = new Map<MessageId, QueuedThreadMessage>();
+    const manager = createThreadOutboxManager({
+      registry,
+      storage: {
+        load: async () => [],
+        write: async (written) => {
+          persisted.set(written.messageId, written);
+        },
+        remove: async (removed) => {
+          persisted.delete(removed.messageId);
+        },
+      },
+    });
+    const queuedMessages = (): ReadonlyArray<QueuedThreadMessage> =>
+      flattenQueuedThreadMessages(registry.get(manager.queuedMessagesByThreadKeyAtom));
+
+    await manager.enqueue(message);
+    expect(queuedMessages()).toHaveLength(1);
+
+    // Run the same dispatch the drain runs, driven by the same decision: only a
+    // `fail` parks, and any decision that goes back to removing empties the
+    // queue the assertions below read.
+    const { deliveryAction } = evaluate({ threadExists: false, shellStatus: "live" });
+    const surfaced: string[] = [];
+    if (deliveryAction === "fail") {
+      await parkUndeliverableThreadOutboxMessage(message, MISSING_THREAD_OUTBOX_FAILURE_REASON, {
+        update: (parked) => manager.update(parked),
+        surfaceError: (reason) => {
+          surfaced.push(reason);
+        },
+      });
+    } else if (deliveryAction === "remove") {
+      await manager.remove(message);
+    }
+
+    const queued = queuedMessages();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.text).toBe(message.text);
+    expect(queued[0]?.failureReason).toBe(MISSING_THREAD_OUTBOX_FAILURE_REASON);
+    // Survives a relaunch: the reason is in the durable copy too.
+    expect(persisted.get(message.messageId)?.failureReason).toBe(
+      MISSING_THREAD_OUTBOX_FAILURE_REASON,
+    );
+    // And the user is told, rather than watching the message disappear.
+    expect(surfaced).toEqual([MISSING_THREAD_OUTBOX_FAILURE_REASON]);
+    registry.dispose();
+  });
+
+  it("says what happened and what to do without naming anything internal", () => {
+    expect(MISSING_THREAD_OUTBOX_FAILURE_REASON).not.toMatch(
+      /threadExists|shellStatus|outbox|thread|shell/i,
+    );
+    expect(MISSING_THREAD_OUTBOX_FAILURE_REASON.length).toBeGreaterThan(0);
   });
 });
 

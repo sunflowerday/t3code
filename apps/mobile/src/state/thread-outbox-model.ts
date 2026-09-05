@@ -152,7 +152,15 @@ export function threadOutboxRetryDelayMs(attempt: number): number {
   return Math.min(1_000 * 2 ** Math.max(0, attempt - 1), THREAD_OUTBOX_MAX_RETRY_DELAY_MS);
 }
 
-export type ThreadOutboxDeliveryAction = "wait" | "remove" | "send";
+export type ThreadOutboxDeliveryAction = "wait" | "remove" | "send" | "fail";
+
+/**
+ * Shown when a queued turn's thread is no longer in this environment's shell.
+ * The message is kept, not dropped: it is the user's own text, and a queue
+ * entry that disappears without a word looks exactly like one that was sent.
+ */
+export const MISSING_THREAD_OUTBOX_FAILURE_REASON =
+  "这条消息发不出去：它所在的对话在电脑上已经没有了。把文字复制到另一个对话再发，或者在这里删掉它。";
 
 export function resolveThreadOutboxDeliveryAction(input: {
   readonly isCreation: boolean;
@@ -173,7 +181,12 @@ export function resolveThreadOutboxDeliveryAction(input: {
     return input.environmentConnected && input.shellStatus === "live" ? "send" : "wait";
   }
   if (!input.threadExists) {
-    return input.shellStatus === "live" ? "remove" : "wait";
+    // A live shell that does not list the thread means this turn has nowhere to
+    // go. Park it with a reason rather than deleting it: a thread can also be
+    // absent from the shell because the imported-thread dedupe dropped it, and
+    // in every case the user must be told instead of watching the message
+    // vanish as if it had been sent.
+    return input.shellStatus === "live" ? "fail" : "wait";
   }
   return input.environmentConnected && !input.threadBusy ? "send" : "wait";
 }
@@ -298,4 +311,23 @@ export function resolveThreadOutboxFailureAction(input: {
     return "retry";
   }
   return "fail";
+}
+
+/**
+ * Keep an undeliverable turn in the outbox and put its reason on screen.
+ *
+ * The two effects are passed in rather than imported: the drain hook lives in a
+ * module that pulls in React Native, so this is the seam where the behaviour
+ * can be run against a real outbox store in a test.
+ */
+export async function parkUndeliverableThreadOutboxMessage(
+  message: QueuedThreadMessage,
+  reason: string,
+  effects: {
+    readonly update: (message: QueuedThreadMessage) => Promise<unknown>;
+    readonly surfaceError: (reason: string) => void;
+  },
+): Promise<void> {
+  effects.surfaceError(reason);
+  await effects.update({ ...message, failureReason: reason });
 }
