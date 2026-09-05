@@ -1,6 +1,7 @@
 import { useNavigation } from "@react-navigation/native";
 import { useCallback } from "react";
 import { Alert } from "react-native";
+import { presentUserFacingError } from "../../lib/userFacingError";
 
 import { removeThreadOutboxMessage } from "../../state/thread-outbox";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
@@ -44,7 +45,10 @@ export function usePendingTaskListActions(): {
               .catch((error) => {
                 Alert.alert(
                   "Could not delete pending task",
-                  error instanceof Error ? error.message : "The pending task could not be removed.",
+                  presentUserFacingError(
+                    error instanceof Error ? error.message : null,
+                    "The pending task could not be removed.",
+                  ),
                 );
               });
           },

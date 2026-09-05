@@ -3,6 +3,7 @@ import { type NetworkStatus } from "@t3tools/client-runtime/connection";
 import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import type { EnvironmentId, ServerConfig } from "@t3tools/contracts";
 
+import { presentUserFacingError } from "../lib/userFacingError";
 import type { EnvironmentPresentation } from "./environments";
 
 export interface WorkspaceEnvironment {
@@ -39,7 +40,7 @@ export function projectWorkspaceEnvironment(
     displayUrl: environment.displayUrl ?? "",
     isRelayManaged: environment.relayManaged,
     connectionState: environment.connection.phase,
-    connectionError: environment.connection.error,
+    connectionError: presentUserFacingError(environment.connection.error),
     connectionErrorTraceId: environment.connection.traceId,
   };
 }

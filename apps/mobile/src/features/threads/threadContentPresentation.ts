@@ -1,4 +1,5 @@
 import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+import { presentUserFacingError } from "../../lib/userFacingError";
 
 export type ThreadContentPresentation =
   | { readonly kind: "ready" }
@@ -29,7 +30,7 @@ export function projectThreadContentPresentation(input: {
     return {
       kind: "unavailable",
       title: "Could not load conversation",
-      detail: input.detailError,
+      detail: presentUserFacingError(input.detailError, "The conversation could not be loaded.")!,
     };
   }
   if (

@@ -317,6 +317,9 @@ const config: ExpoConfig = {
       {
         ios: {
           deploymentTarget: "18.0",
+          // Official RN/Expo compiler cache. Consumed by the generated Podfile
+          // as apple.ccacheEnabled / USE_CCACHE. See scripts/build-ios-release.sh.
+          ccacheEnabled: true,
           // AppCheckCore 11.3+ includes Swift and needs module maps for these Objective-C dependencies.
           extraPods: [
             { name: "GoogleUtilities", modular_headers: true },

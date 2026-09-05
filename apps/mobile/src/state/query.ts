@@ -2,6 +2,7 @@ import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { presentUserFacingError } from "../lib/userFacingError";
 
 const EMPTY_ASYNC_RESULT_ATOM = Atom.make(AsyncResult.initial<never, never>(false)).pipe(
   Atom.withLabel("mobile-environment-query:empty"),
@@ -16,9 +17,10 @@ export interface EnvironmentQueryView<A> {
 
 function formatError(cause: Cause.Cause<unknown>): string {
   const error = Cause.squash(cause);
-  return error instanceof Error && error.message.trim().length > 0
-    ? error.message
-    : "The environment request failed.";
+  return presentUserFacingError(
+    error instanceof Error ? error.message : null,
+    "The environment request failed.",
+  )!;
 }
 
 export function useEnvironmentQuery<A, E>(

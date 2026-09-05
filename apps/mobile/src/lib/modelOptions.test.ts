@@ -6,6 +6,7 @@ import {
   buildModelMenuActions,
   buildModelOptions,
   groupByProvider,
+  modelCatalogStatus,
   resolveSelectableModelSelection,
 } from "./modelOptions";
 
@@ -173,5 +174,40 @@ describe("mobile model options", () => {
     expect(resolveSelectableModelSelection(config, removed)).toBeNull();
     // No config (environment offline) — nothing to validate against.
     expect(resolveSelectableModelSelection(null, disabled)).toBe(disabled);
+  });
+
+  it("distinguishes an absent catalog from an environment that reports no providers", () => {
+    expect(modelCatalogStatus(null)).toMatchObject({
+      kind: "missing",
+      label: "Model catalog missing",
+    });
+    expect(
+      modelCatalogStatus({
+        providers: [],
+      } as unknown as ServerConfig),
+    ).toMatchObject({
+      kind: "no-providers",
+      label: "No model providers",
+    });
+  });
+
+  it("does not treat a stored fallback as a selectable model catalog", () => {
+    expect(
+      modelCatalogStatus({
+        providers: [
+          {
+            instanceId: "codex",
+            driver: "codex",
+            enabled: false,
+            installed: true,
+            auth: { status: "authenticated" },
+            models: [{ slug: "gpt-5.6-sol", name: "GPT-5.6 Sol", isCustom: false }],
+          },
+        ],
+      } as unknown as ServerConfig),
+    ).toMatchObject({
+      kind: "no-models",
+      label: "No selectable models",
+    });
   });
 });

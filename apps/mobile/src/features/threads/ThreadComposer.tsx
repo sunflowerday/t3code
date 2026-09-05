@@ -18,6 +18,7 @@ import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -53,7 +54,14 @@ import {
 import { ControlPill, ControlPillMenu } from "../../components/ControlPill";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
-import { buildModelMenuActions, buildModelOptions, groupByProvider } from "../../lib/modelOptions";
+import { resolveMobileClientCapabilities } from "../../lib/mobileCapabilities";
+import {
+  buildModelMenuActions,
+  buildModelOptions,
+  groupByProvider,
+  modelCatalogStatus,
+} from "../../lib/modelOptions";
+import { presentUserFacingError } from "../../lib/userFacingError";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import type { RemoteClientConnectionState } from "../../lib/connection";
 import {
@@ -109,6 +117,7 @@ export interface ThreadComposerProps {
   readonly onNativePasteImages: (uris: ReadonlyArray<string>) => Promise<void>;
   readonly onRemoveDraftImage: (imageId: string) => void;
   readonly onStopThread: () => void;
+  readonly canStopThread: boolean;
   readonly onSendMessage: () => Promise<MessageId | null>;
   readonly onUpdateModelSelection: (modelSelection: ModelSelection) => void;
   readonly onUpdateRuntimeMode: (runtimeMode: RuntimeMode) => void;
@@ -195,23 +204,29 @@ function composerConnectionStatus(input: {
 
   switch (input.connectionState) {
     case "connecting":
-    case "reconnecting":
-      return {
-        kind: "reconnecting",
-        label:
-          input.connectionError === null
-            ? `Reconnecting to ${environmentLabel}...`
-            : `Failed to connect. Retrying ${environmentLabel}...`,
-      };
+    case "reconnecting": {
+      const connectionError = presentUserFacingError(input.connectionError);
+      return connectionError
+        ? {
+            kind: "unavailable",
+            label: `Failed to connect to ${environmentLabel}: ${connectionError}`,
+          }
+        : {
+            kind: "reconnecting",
+            label: `Reconnecting to ${environmentLabel}...`,
+          };
+    }
     case "offline":
       return { kind: "unavailable", label: "You are offline" };
-    case "error":
+    case "error": {
+      const connectionError = presentUserFacingError(input.connectionError);
       return {
         kind: "unavailable",
-        label: input.connectionError
-          ? `Failed to connect to ${environmentLabel}: ${input.connectionError}`
+        label: connectionError
+          ? `Failed to connect to ${environmentLabel}: ${connectionError}`
           : `Failed to connect to ${environmentLabel}`,
       };
+    }
     case "available":
       return { kind: "unavailable", label: `${environmentLabel} is not connected` };
     case "connected":
@@ -306,8 +321,9 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     onExpandedChange?.(false);
   }, [onExpandedChange]);
   const showStopAction =
-    props.selectedThread.session?.status === "running" ||
-    props.selectedThread.session?.status === "starting";
+    props.canStopThread &&
+    (props.selectedThread.session?.status === "running" ||
+      props.selectedThread.session?.status === "starting");
 
   const sendLabel =
     props.connectionState !== "connected" || props.activeThreadBusy || props.queueCount > 0
@@ -360,10 +376,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     }
     return detectComposerTrigger(props.draftMessage, composerSelection.end);
   }, [composerSelection, props.draftMessage]);
+  const workspaceSupported = resolveMobileClientCapabilities(
+    props.serverConfig?.environment.capabilities,
+  ).workspace;
   const pathSearch = useComposerPathSearch({
     environmentId: props.environmentId,
-    cwd: composerTrigger?.kind === "path" ? props.projectCwd : null,
-    query: composerTrigger?.kind === "path" ? composerTrigger.query : null,
+    cwd: workspaceSupported && composerTrigger?.kind === "path" ? props.projectCwd : null,
+    query: workspaceSupported && composerTrigger?.kind === "path" ? composerTrigger.query : null,
   });
 
   const composerMenuItems: ComposerCommandItem[] = useMemo(() => {
@@ -494,7 +513,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       }));
     }
 
-    if (composerTrigger.kind === "path") {
+    if (workspaceSupported && composerTrigger.kind === "path") {
       return pathSearch.entries.map((entry) => {
         const parts = entry.path.split("/");
         return {
@@ -509,7 +528,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     }
 
     return [];
-  }, [composerTrigger, pathSearch.entries, selectedProviderStatus]);
+  }, [composerTrigger, pathSearch.entries, selectedProviderStatus, workspaceSupported]);
 
   // ── Handle command selection ──────────────────────────────
   const { onChangeDraftMessage, onUpdateInteractionMode, draftMessage, onSendMessage } = props;
@@ -609,6 +628,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     () => buildModelMenuActions(providerGroups, currentModelSelection),
     [providerGroups, currentModelSelection],
   );
+  const catalogStatus = useMemo(() => modelCatalogStatus(props.serverConfig), [props.serverConfig]);
+  const handleModelCatalogIssue = useCallback(() => {
+    if (catalogStatus.kind === "available") {
+      return;
+    }
+    Alert.alert(catalogStatus.title, catalogStatus.detail);
+  }, [catalogStatus]);
 
   // ── Options menu ─────────────────────────────────────────
   const optionsMenuActions = useMemo(
@@ -849,18 +875,28 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   onPress={() => void props.onPickDraftImages()}
                   showChevron={false}
                 />
-                <ControlPillMenu
-                  actions={modelMenuActions}
-                  onPressAction={({ nativeEvent }) => handleModelMenuAction(nativeEvent.event)}
-                >
+                {catalogStatus.kind === "available" ? (
+                  <ControlPillMenu
+                    actions={modelMenuActions}
+                    onPressAction={({ nativeEvent }) => handleModelMenuAction(nativeEvent.event)}
+                  >
+                    <ComposerToolbarTrigger
+                      accessibilityLabel="Model"
+                      iconNode={
+                        <ProviderIcon provider={currentModelOption?.providerDriver} size={16} />
+                      }
+                      label={currentModelOption?.label ?? currentModelSelection.model}
+                    />
+                  </ControlPillMenu>
+                ) : (
                   <ComposerToolbarTrigger
-                    accessibilityLabel="Model"
-                    iconNode={
-                      <ProviderIcon provider={currentModelOption?.providerDriver} size={16} />
-                    }
-                    label={currentModelOption?.label ?? currentModelSelection.model}
+                    accessibilityLabel={catalogStatus.title}
+                    icon="exclamationmark.triangle"
+                    label={catalogStatus.label}
+                    onPress={handleModelCatalogIssue}
+                    showChevron={false}
                   />
-                </ControlPillMenu>
+                )}
                 <ControlPillMenu
                   actions={optionsMenuActions}
                   onPressAction={({ nativeEvent }) => handleOptionsMenuAction(nativeEvent.event)}

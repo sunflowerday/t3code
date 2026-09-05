@@ -19,6 +19,7 @@ import { useBranches } from "../state/queries";
 import { threadEnvironment } from "../state/threads";
 import { vcsActionManager, vcsEnvironment } from "../state/vcs";
 import { uuidv4 } from "../lib/uuid";
+import { presentUserFacingError } from "../lib/userFacingError";
 import { appAtomRegistry } from "./atom-registry";
 import { setPendingConnectionError } from "./use-remote-environment-registry";
 import { useAtomCommand } from "./use-atom-command";
@@ -105,7 +106,10 @@ export function useSelectedThreadGitActions() {
           );
       if (AsyncResult.isFailure(result)) {
         const error = Cause.squash(result.cause);
-        const message = error instanceof Error ? error.message : "Failed to refresh git status.";
+        const message = presentUserFacingError(
+          error instanceof Error ? error.message : null,
+          "Failed to refresh git status.",
+        );
         setPendingConnectionError(message);
         return null;
       }
@@ -154,7 +158,10 @@ export function useSelectedThreadGitActions() {
           : await vcsActionManager.track(appAtomRegistry, target, { operation, label }, run);
       if (AsyncResult.isFailure(result)) {
         const error = Cause.squash(result.cause);
-        const message = error instanceof Error ? error.message : "Git action failed.";
+        const message = presentUserFacingError(
+          error instanceof Error ? error.message : null,
+          "Git action failed.",
+        );
         setPendingConnectionError(message);
         showGitActionResult({ type: "error", title: "Git action failed", description: message });
         return null;

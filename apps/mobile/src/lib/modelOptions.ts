@@ -28,6 +28,63 @@ export type ProviderGroup = {
   readonly models: ReadonlyArray<ModelOption>;
 };
 
+export type ModelCatalogStatus =
+  | { readonly kind: "available" }
+  | {
+      readonly kind: "missing";
+      readonly label: "Model catalog missing";
+      readonly title: "无法获取模型目录";
+      readonly detail: "环境尚未提供模型目录。请检查连接后重试；如果问题持续，请在环境设置中重新连接。";
+    }
+  | {
+      readonly kind: "no-providers";
+      readonly label: "No model providers";
+      readonly title: "没有可用的模型提供商";
+      readonly detail: "环境报告没有已配置的模型提供商。请在服务端配置模型提供商后重试。";
+    }
+  | {
+      readonly kind: "no-models";
+      readonly label: "No selectable models";
+      readonly title: "没有可选择的模型";
+      readonly detail: "当前提供商没有已启用、已安装且已认证的模型。请检查服务端的提供商配置后重试。";
+    };
+
+export function modelCatalogStatus(config: T3ServerConfig | null | undefined): ModelCatalogStatus {
+  if (!config) {
+    return {
+      kind: "missing",
+      label: "Model catalog missing",
+      title: "无法获取模型目录",
+      detail: "环境尚未提供模型目录。请检查连接后重试；如果问题持续，请在环境设置中重新连接。",
+    };
+  }
+  if (config.providers.length === 0) {
+    return {
+      kind: "no-providers",
+      label: "No model providers",
+      title: "没有可用的模型提供商",
+      detail: "环境报告没有已配置的模型提供商。请在服务端配置模型提供商后重试。",
+    };
+  }
+  if (
+    !config.providers.some(
+      (provider) =>
+        provider.enabled &&
+        provider.installed &&
+        provider.auth.status !== "unauthenticated" &&
+        provider.models.length > 0,
+    )
+  ) {
+    return {
+      kind: "no-models",
+      label: "No selectable models",
+      title: "没有可选择的模型",
+      detail: "当前提供商没有已启用、已安装且已认证的模型。请检查服务端的提供商配置后重试。",
+    };
+  }
+  return { kind: "available" };
+}
+
 function providerDisplayLabel(provider: {
   readonly displayName?: string | undefined;
   readonly driver: string;

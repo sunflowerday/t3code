@@ -15,6 +15,8 @@ import {
   View,
 } from "react-native";
 
+import { isConnectionRetrying } from "../../lib/userFacingError";
+
 import { AppText as Text } from "../../components/AppText";
 import { cn } from "../../lib/cn";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
@@ -255,8 +257,7 @@ function CloudEnvironmentRowShell(props: {
   const activeTrack = String(useThemeColor("--color-switch-active"));
   const track = String(useThemeColor("--color-secondary-border"));
   const chevron = useThemeColor("--color-chevron");
-  const isRetrying =
-    props.connectionState === "connecting" || props.connectionState === "reconnecting";
+  const isRetrying = isConnectionRetrying(props.connectionState, props.connectionError);
   const shouldPulse = isRetrying;
   const statusText =
     props.statusText ??

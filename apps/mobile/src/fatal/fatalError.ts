@@ -9,10 +9,21 @@ export interface ErrorUtilsLike {
   readonly setGlobalHandler: (handler: (error: Error, isFatal?: boolean) => void) => void;
 }
 
+export interface NewArchExceptionData {
+  readonly message?: unknown;
+  readonly isFatal?: unknown;
+  readonly preventDefault?: () => void;
+}
+
+export interface NewArchExceptionRegistry {
+  readonly RN$registerExceptionListener?: (listener: (data: NewArchExceptionData) => void) => void;
+}
+
 export interface InstallFatalErrorHandlerOptions {
   readonly errorUtils?: ErrorUtilsLike | null;
   readonly persist?: (record: FatalErrorRecord) => void;
   readonly now?: () => Date;
+  readonly newArch?: NewArchExceptionRegistry | null;
 }
 
 const LAST_FATAL_DIRECTORY = "diagnostics";
@@ -115,6 +126,82 @@ function getGlobalErrorUtils(): ErrorUtilsLike | null {
   return candidate;
 }
 
+function getNewArchRegistry(): NewArchExceptionRegistry {
+  return globalThis as NewArchExceptionRegistry;
+}
+
+function containFatal(
+  error: unknown,
+  options: {
+    readonly persist?: (record: FatalErrorRecord) => void;
+    readonly now?: () => Date;
+  },
+): void {
+  reportFatalError(error, {
+    ...(options.persist === undefined ? {} : { persist: options.persist }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
+}
+
+/**
+ * New-architecture runtimes report through `RN$handleException` and never
+ * consult `ErrorUtils.setGlobalHandler`. `preventDefault` stops the C++
+ * pipeline from calling native `reportFatal` / `RCTFatal`.
+ */
+export function installNewArchFatalListener(
+  options: {
+    readonly registry?: NewArchExceptionRegistry | null;
+    readonly persist?: (record: FatalErrorRecord) => void;
+    readonly now?: () => Date;
+  } = {},
+): () => void {
+  const registry = options.registry === undefined ? getNewArchRegistry() : options.registry;
+  const register = registry?.RN$registerExceptionListener;
+  if (typeof register !== "function") {
+    return () => undefined;
+  }
+
+  register((data) => {
+    if (data.isFatal !== true) {
+      return;
+    }
+    const message = typeof data.message === "string" && data.message.length > 0 ? data.message : "unknown";
+    containFatal(new Error(message), options);
+    data.preventDefault?.();
+  });
+
+  return () => undefined;
+}
+
+export const FATAL_PROBE_MESSAGE = "t3-fatal-probe";
+const FATAL_PROBE_FILE = "fatal-probe";
+
+export async function throwIfFatalProbeArmed(
+  readProbe: () => Promise<boolean> = readFatalProbeFile,
+): Promise<void> {
+  if (!(await readProbe())) {
+    return;
+  }
+  setTimeout(() => {
+    throw new Error(FATAL_PROBE_MESSAGE);
+  }, 0);
+}
+
+async function readFatalProbeFile(): Promise<boolean> {
+  try {
+    const { Directory, File, Paths } = await import("expo-file-system");
+    const file = new File(new Directory(Paths.document, LAST_FATAL_DIRECTORY), FATAL_PROBE_FILE);
+    if (!file.exists) {
+      return false;
+    }
+    file.delete();
+    return true;
+  } catch (cause) {
+    console.error("[t3-fatal] probe read failed", cause);
+    return false;
+  }
+}
+
 /**
  * Replaces RN's default fatal path. A fatal JS exception is recorded and shown
  * instead of being forwarded to native `reportFatal` / `RCTFatal`.
@@ -122,19 +209,22 @@ function getGlobalErrorUtils(): ErrorUtilsLike | null {
 export function installFatalErrorHandler(
   options: InstallFatalErrorHandlerOptions = {},
 ): () => void {
+  const uninstallNewArch = installNewArchFatalListener({
+    ...(options.newArch === undefined ? {} : { registry: options.newArch }),
+    ...(options.persist === undefined ? {} : { persist: options.persist }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
+
   const errorUtils = options.errorUtils === undefined ? getGlobalErrorUtils() : options.errorUtils;
   if (errorUtils == null) {
-    return () => undefined;
+    return uninstallNewArch;
   }
 
   const previous = errorUtils.getGlobalHandler?.() ?? undefined;
   const handler = (error: Error, isFatal?: boolean) => {
     try {
       if (isFatal === true) {
-        reportFatalError(error, {
-          persist: options.persist,
-          now: options.now,
-        });
+        containFatal(error, options);
         return;
       }
     } catch (cause) {
@@ -145,6 +235,7 @@ export function installFatalErrorHandler(
 
   errorUtils.setGlobalHandler(handler);
   return () => {
+    uninstallNewArch();
     if (previous !== undefined) {
       errorUtils.setGlobalHandler(previous);
     }

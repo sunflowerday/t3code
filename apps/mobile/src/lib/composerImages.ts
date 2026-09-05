@@ -4,6 +4,7 @@ import {
   type UploadChatImageAttachment,
 } from "@t3tools/contracts";
 import { estimateBase64ByteSize } from "./base64";
+import { presentUserFacingError } from "./userFacingError";
 import { uuidv4 } from "./uuid";
 
 export interface DraftComposerImageAttachment extends UploadChatImageAttachment {
@@ -60,8 +61,10 @@ export async function pickComposerImages(input: { readonly existingCount: number
   } catch (error) {
     return {
       images: [],
-      error:
-        error instanceof Error ? error.message : "Image attachments are unavailable right now.",
+      error: presentUserFacingError(
+        error instanceof Error ? error.message : null,
+        "Image attachments are unavailable right now.",
+      ),
     };
   }
 
@@ -131,7 +134,10 @@ export async function pasteComposerClipboard(input: { readonly existingCount: nu
     return {
       images: [],
       text: null,
-      error: error instanceof Error ? error.message : "Clipboard paste is unavailable right now.",
+      error: presentUserFacingError(
+        error instanceof Error ? error.message : null,
+        "Clipboard paste is unavailable right now.",
+      ),
     };
   }
 

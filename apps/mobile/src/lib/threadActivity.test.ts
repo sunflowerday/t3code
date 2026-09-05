@@ -17,6 +17,7 @@ import {
   type ThreadFeedActivity,
   type ThreadFeedEntry,
 } from "./threadActivity";
+import { GENERIC_ACTIONABLE_ERROR } from "./userFacingError";
 
 function makeActivity(
   input: Partial<OrchestrationThreadActivity> &
@@ -106,6 +107,34 @@ describe("buildThreadFeed", () => {
         activities: [{ id: "activity-latest", turnId: "turn-latest" }],
       },
     ]);
+  });
+
+  it("does not expose provider error identifiers in the thread work log", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-error"),
+      projectId: ProjectId.make("project-1"),
+      title: "Error thread",
+      activities: [
+        makeActivity({
+          id: EventId.make("activity-error"),
+          kind: "runtime.warning",
+          summary: "synara.engine/engine.request_failed",
+          createdAt: "2026-04-01T00:00:01.000Z",
+          payload: { detail: "synara.engine/engine.request_failed" },
+        }),
+      ],
+    });
+
+    const group = buildThreadFeed(thread)[0];
+    expect(group).toMatchObject({ type: "activity-group" });
+    if (!group || group.type !== "activity-group") {
+      return;
+    }
+
+    const activity = group.activities[0]!;
+    expect(activity.summary).toBe(GENERIC_ACTIONABLE_ERROR);
+    expect(activity.detail).toBe(GENERIC_ACTIONABLE_ERROR);
+    expect(activity.getFullDetail()).not.toContain("synara.engine/engine.request_failed");
   });
 
   it("collapses matching tool lifecycle rows like desktop", () => {

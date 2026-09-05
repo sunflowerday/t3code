@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
+  FATAL_PROBE_MESSAGE,
   clearFatalError,
   getLastFatalError,
   installFatalErrorHandler,
+  installNewArchFatalListener,
   reportFatalError,
   resetFatalErrorStoreForTests,
+  throwIfFatalProbeArmed,
   type ErrorUtilsLike,
+  type NewArchExceptionData,
 } from "./fatalError";
 
 class MockErrorUtils implements ErrorUtilsLike {
@@ -103,5 +107,104 @@ describe("default RN fatal path vs takeover", () => {
     });
     expect(() => errorUtils.handler?.(new Error("probe boom"), true)).not.toThrow();
     expect(getLastFatalError()?.message).toBe("probe boom");
+  });
+});
+
+describe("new-architecture exception listener", () => {
+  it("records a fatal and calls preventDefault so native reportFatal is not reached", () => {
+    let listener: ((data: NewArchExceptionData) => void) | undefined;
+
+    installNewArchFatalListener({
+      registry: {
+        RN$registerExceptionListener: (next) => {
+          listener = next;
+        },
+      },
+      persist: () => undefined,
+      now: () => new Date("2026-08-18T07:24:00.000Z"),
+    });
+
+    let preventDefaultCalls = 0;
+    listener?.({
+      message: "pipeline boom",
+      isFatal: true,
+      preventDefault: () => {
+        preventDefaultCalls += 1;
+      },
+    });
+
+    expect(preventDefaultCalls).toBe(1);
+    expect(getLastFatalError()).toEqual({
+      message: "pipeline boom",
+      stack: expect.stringContaining("pipeline boom"),
+      occurredAt: "2026-08-18T07:24:00.000Z",
+    });
+  });
+
+  it("does not swallow a soft exception", () => {
+    let listener: ((data: NewArchExceptionData) => void) | undefined;
+    installNewArchFatalListener({
+      registry: {
+        RN$registerExceptionListener: (next) => {
+          listener = next;
+        },
+      },
+      persist: () => undefined,
+    });
+
+    let preventDefaultCalls = 0;
+    listener?.({
+      message: "soft",
+      isFatal: false,
+      preventDefault: () => {
+        preventDefaultCalls += 1;
+      },
+    });
+
+    expect(preventDefaultCalls).toBe(0);
+    expect(getLastFatalError()).toBeNull();
+  });
+
+  it("empty listener data does not count as a recorded fatal", () => {
+    let listener: ((data: NewArchExceptionData) => void) | undefined;
+    installNewArchFatalListener({
+      registry: {
+        RN$registerExceptionListener: (next) => {
+          listener = next;
+        },
+      },
+      persist: () => undefined,
+    });
+
+    listener?.({});
+    expect(getLastFatalError()).toBeNull();
+  });
+});
+
+describe("fatal probe", () => {
+  it("does not throw when the probe file is absent", async () => {
+    await expect(throwIfFatalProbeArmed(async () => false)).resolves.toBeUndefined();
+  });
+
+  it("schedules the same uncaught exception the Release probe uses", async () => {
+    const scheduled: Array<Error> = [];
+    const original = globalThis.setTimeout;
+    globalThis.setTimeout = ((handler: TimerHandler) => {
+      if (typeof handler === "function") {
+        try {
+          handler();
+        } catch (error) {
+          scheduled.push(error as Error);
+        }
+      }
+      return 0;
+    }) as typeof setTimeout;
+    try {
+      await throwIfFatalProbeArmed(async () => true);
+    } finally {
+      globalThis.setTimeout = original;
+    }
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0]?.message).toBe(FATAL_PROBE_MESSAGE);
   });
 });

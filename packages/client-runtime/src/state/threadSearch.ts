@@ -57,7 +57,9 @@ export function makeThreadSearchKey(
   query: string,
 ): string {
   return JSON.stringify([
-    [...environmentIds].toSorted((left, right) => left.localeCompare(right)),
+    // .sort() on a copy, not .toSorted(): Hermes doesn't ship the ES2023 method,
+    // and calling it threw "undefined is not a function" on every phone search.
+    [...environmentIds].sort((left, right) => left.localeCompare(right)),
     query,
   ]);
 }

@@ -27,7 +27,9 @@ import { useThemeColor } from "../../lib/useThemeColor";
 import { AppText as Text } from "../../components/AppText";
 import { EmptyState } from "../../components/EmptyState";
 import type { WorkspaceEnvironment, WorkspaceState } from "../../state/workspaceModel";
+import { hasConfirmedEnvironmentFailure } from "../../state/environmentAvailability";
 import type { SavedRemoteConnection } from "../../lib/connection";
+import { resolveMobileClientCapabilities } from "../../lib/mobileCapabilities";
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
@@ -127,7 +129,7 @@ const PRE_LIQUID_GLASS_BOTTOM_TOOLBAR_HEIGHT = 44;
  * room here.
  */
 
-function deriveEmptyState(props: {
+export function deriveHomeEmptyState(props: {
   readonly catalogState: WorkspaceState;
   readonly projectCount: number;
 }): { readonly title: string; readonly detail: string; readonly loading: boolean } {
@@ -148,12 +150,7 @@ function deriveEmptyState(props: {
     };
   }
 
-  if (
-    (catalogState.connectionState === "available" ||
-      catalogState.connectionState === "offline" ||
-      catalogState.connectionState === "error") &&
-    !catalogState.hasLoadedShellSnapshot
-  ) {
+  if (hasConfirmedEnvironmentFailure(catalogState)) {
     return {
       title: "Environment unavailable",
       detail:
@@ -560,7 +557,10 @@ export function HomeScreen(props: HomeScreenProps) {
   const settlementEnvironmentIds = useMemo(() => {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
-      if (config.environment.capabilities.threadSettlement === true) {
+      if (
+        config.environment.capabilities.threadSettlement === true &&
+        resolveMobileClientCapabilities(config.environment.capabilities).threadLifecycle
+      ) {
         supported.add(environmentId);
       }
     }
@@ -569,7 +569,10 @@ export function HomeScreen(props: HomeScreenProps) {
   const snoozeEnvironmentIds = useMemo(() => {
     const supported = new Set<EnvironmentId>();
     for (const [environmentId, config] of serverConfigs) {
-      if (config.environment.capabilities.threadSnooze === true) {
+      if (
+        config.environment.capabilities.threadSnooze === true &&
+        resolveMobileClientCapabilities(config.environment.capabilities).threadLifecycle
+      ) {
         supported.add(environmentId);
       }
     }
@@ -940,7 +943,7 @@ export function HomeScreen(props: HomeScreenProps) {
       : (props.savedConnectionsById[props.selectedEnvironmentId]?.environmentLabel ??
         "this environment");
   const shouldShowConnectionStatus = shouldShowWorkspaceConnectionStatus(props.catalogState);
-  const emptyState = deriveEmptyState({
+  const emptyState = deriveHomeEmptyState({
     catalogState: props.catalogState,
     projectCount: props.projects.length,
   });
