@@ -1012,7 +1012,12 @@ export function HomeScreen(props: HomeScreenProps) {
   const v2ListHeader = listHeader;
 
   const listEmpty = !hasResults ? (
-    hasSearchQuery && threadSearch.isPending ? null : hasSearchQuery ? (
+    hasSearchQuery && threadSearch.isPending ? null : threadSearch.queryIssue === "too-long" ? (
+      <EmptyState
+        title="Search is too long"
+        detail="Thread search accepts at most 200 characters."
+      />
+    ) : hasSearchQuery ? (
       <EmptyState title="No results" detail={`No threads matching "${props.searchQuery}".`} />
     ) : selectedProjectScope !== null ? (
       <EmptyState
@@ -1033,7 +1038,12 @@ export function HomeScreen(props: HomeScreenProps) {
   // is empty. Snoozed threads need no special empty state: their shelf header
   // is a list row even while collapsed.
   const v2ListEmpty =
-    hasSearchQuery && threadSearch.isPending ? null : hasSearchQuery ? (
+    hasSearchQuery && threadSearch.isPending ? null : threadSearch.queryIssue === "too-long" ? (
+      <EmptyState
+        title="Search is too long"
+        detail="Thread search accepts at most 200 characters."
+      />
+    ) : hasSearchQuery ? (
       <EmptyState title="No results" detail={`No threads matching "${props.searchQuery}".`} />
     ) : v2ScopedProjectGroup !== null ? (
       <EmptyState

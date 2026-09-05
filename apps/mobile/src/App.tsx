@@ -1,7 +1,7 @@
 import { BlurTargetView } from "expo-blur";
 import * as Linking from "expo-linking";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { StatusBar, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -10,6 +10,8 @@ import { createStaticNavigation, DarkTheme, DefaultTheme } from "@react-navigati
 
 import { RegistryContext } from "@effect/atom-react";
 import { ConfirmDialogHost } from "./components/ConfirmDialogHost";
+import { FatalErrorHost } from "./fatal/FatalErrorHost";
+import { clearFatalError } from "./fatal/fatalError";
 import { CloudAuthProvider } from "./features/cloud/CloudAuthProvider";
 import { prepareNativeShowcaseCapture } from "./features/showcase/nativeShowcaseScene";
 import { IncomingShareProvider } from "./features/sharing/IncomingShareProvider";
@@ -60,6 +62,7 @@ function SplashScreenCoordinator() {
 export default function App() {
   const colorScheme = useColorScheme();
   const statusBarBg = useThemeColor("--color-status-bar");
+  const [appGeneration, setAppGeneration] = useState(0);
 
   return (
     <RegistryContext.Provider value={appAtomRegistry}>
@@ -83,6 +86,7 @@ export default function App() {
                 <BlurTargetView ref={appBlurTargetRef} style={{ flex: 1 }}>
                   <IncomingShareProvider>
                     <Navigation
+                      key={appGeneration}
                       linking={appLinking}
                       theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
                     />
@@ -92,6 +96,12 @@ export default function App() {
                 {/* Anchored-menu overlays render here — in-window, so the
                     keyboard stays up while a dropdown is open. */}
                 <OverlayPortalHost />
+                <FatalErrorHost
+                  onGoHome={() => {
+                    clearFatalError();
+                    setAppGeneration((generation) => generation + 1);
+                  }}
+                />
               </SafeAreaProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>

@@ -1,4 +1,3 @@
-import Constants from "expo-constants";
 import type {
   NativeStackHeaderItem,
   NativeStackNavigationOptions,
@@ -6,9 +5,7 @@ import type {
 import { Platform, View } from "react-native";
 
 import { AppText as Text } from "./AppText";
-import { T3Wordmark } from "./T3Wordmark";
 import { IPAD_HOME_TITLE_OFFSET } from "../lib/layoutMetrics";
-import { resolveMobileStageLabel } from "../lib/mobileBranding";
 import { useThemeColor } from "../lib/useThemeColor";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../native/native-glass";
 
@@ -26,8 +23,6 @@ export function CompactBrandTitle(
 ) {
   const iconColor = useThemeColor("--color-icon");
   const mutedColor = useThemeColor("--color-foreground-muted");
-  const subtleColor = useThemeColor("--color-subtle");
-  const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
   const titleOffset =
     Platform.OS !== "ios"
       ? 0
@@ -42,7 +37,7 @@ export function CompactBrandTitle(
   return (
     <View
       aria-level={1}
-      accessibilityLabel="T3 Code, Threads"
+      accessibilityLabel="Kuca, Threads"
       accessible
       role="heading"
       style={{
@@ -52,37 +47,17 @@ export function CompactBrandTitle(
         marginLeft: titleOffset,
       }}
     >
-      <T3Wordmark color={iconColor} height={15} />
+      {/* Kuca micro-patch: own wordmark, no T3 lockup and no upstream stage badge. */}
       <Text
         style={{
-          color: mutedColor,
-          fontFamily: "DMSans-Medium",
+          color: iconColor,
+          fontFamily: "DMSans-Bold",
           fontSize: 21,
           letterSpacing: -0.5,
         }}
       >
-        Code
+        Kuca
       </Text>
-      <View
-        style={{
-          backgroundColor: subtleColor,
-          borderRadius: 999,
-          paddingHorizontal: 6,
-          paddingVertical: 2,
-        }}
-      >
-        <Text
-          style={{
-            color: mutedColor,
-            fontFamily: "DMSans-Bold",
-            fontSize: 9,
-            letterSpacing: 0.9,
-            textTransform: "uppercase",
-          }}
-        >
-          {stageLabel}
-        </Text>
-      </View>
     </View>
   );
 }

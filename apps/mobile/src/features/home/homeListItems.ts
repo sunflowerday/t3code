@@ -4,7 +4,7 @@ import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import type { HomeThreadGroup } from "./homeThreadList";
 
 /** Threads shown per project before the "Show more" affordance appears. */
-export const HOME_INITIAL_VISIBLE_THREADS = 6;
+export const HOME_INITIAL_VISIBLE_THREADS = 500; // Kuca micro-patch: show all by default
 /** Additional threads revealed per "Show more" tap. */
 export const HOME_SHOW_MORE_STEP = 10;
 

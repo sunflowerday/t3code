@@ -77,7 +77,7 @@ const VARIANT_CONFIG = {
     assets: PREVIEW_ASSETS,
   },
   production: {
-    appName: "T3 Code",
+    appName: "Kuca",
     scheme: "t3code",
     iosBundleIdentifier: "com.t3tools.t3code",
     androidPackage: "com.t3tools.t3code",
@@ -179,7 +179,7 @@ const config: ExpoConfig = {
     fallbackToCacheTimeout: 0,
   },
   ios: {
-    icon: variant.assets.iosIcon,
+    icon: variant.assets.appIcon, // Kuca micro-patch: use Kuca PNG, not the T3 .icon composer
     supportsTablet: true,
     // Multitasking-capable iPad apps cannot rotate programmatically, so the
     // showcase capture build requires full screen (see infoPlist below).
@@ -333,6 +333,7 @@ const config: ExpoConfig = {
     // target (which must exist before the compile phase can be attached).
     ...(!isIosPersonalTeamBuild ? ["./plugins/withWidgetLogoAsset.cjs", widgetsPlugin] : []),
     "./plugins/withIosSceneLifecycle.cjs",
+    "./plugins/withIosFatalHandler.cjs",
     "./plugins/withAndroidCleartextTraffic.cjs",
     "./plugins/withAndroidGradleHeap.cjs",
     "./plugins/withAndroidModernPopupMenu.cjs",

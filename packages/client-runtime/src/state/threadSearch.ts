@@ -22,6 +22,35 @@ const ThreadSearchKey = Schema.Tuple([
   OrchestrationSearchThreadsInput.fields.query,
 ]);
 const decodeThreadSearchKey = Schema.decodeUnknownSync(ThreadSearchKey);
+const decodeThreadSearchQuery = Schema.decodeUnknownOption(
+  OrchestrationSearchThreadsInput.fields.query,
+);
+
+export type ThreadSearchQueryIssue = "too-short" | "too-long";
+
+export function inspectThreadSearchQuery(query: string): "ok" | ThreadSearchQueryIssue {
+  if (Option.isSome(decodeThreadSearchQuery(query))) {
+    return "ok";
+  }
+  return query.trim().length < 2 ? "too-short" : "too-long";
+}
+
+export function resolveThreadSearchRequest(
+  environmentIds: ReadonlyArray<EnvironmentId>,
+  query: string,
+): {
+  readonly key: string | null;
+  readonly queryIssue: Extract<ThreadSearchQueryIssue, "too-long"> | null;
+} {
+  const inspection = inspectThreadSearchQuery(query);
+  if (inspection === "too-long") {
+    return { key: null, queryIssue: "too-long" };
+  }
+  if (environmentIds.length === 0 || inspection !== "ok") {
+    return { key: null, queryIssue: null };
+  }
+  return { key: makeThreadSearchKey(environmentIds, query.trim()), queryIssue: null };
+}
 
 export function makeThreadSearchKey(
   environmentIds: ReadonlyArray<EnvironmentId>,
